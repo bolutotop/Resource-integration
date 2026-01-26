@@ -1,0 +1,300 @@
+// app/components/AuthForm.module.scss
+
+// 变量
+$bg: #EDF2F0;
+$neu-1: #ecf0f3;
+$neu-2: #d1d9e6;
+$white: #f9f9f9;
+$gray: #a0a5a8;
+$black: #181818;
+$purple: #4B70E2;
+$transition: 1.25s;
+
+// --- 外部容器 ---
+.wrapper {
+  width: 100%;
+  height: auto; // 高度由内容撑开
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: transparent; // 透明，让 VideoPortal 的模糊遮罩显示出来
+  padding: 20px; // 防止移动端贴边
+}
+
+// --- 卡片主体 (核心修改) ---
+.main {
+  position: relative;
+  width: 1000px;
+  min-width: 1000px;
+  min-height: 600px;
+  height: 600px;
+  padding: 25px;
+
+  // 1. 开启半透明背景 (让底下的模糊透上来)
+  background-color: rgba($neu-1, 0.85);
+
+  // 2. 开启卡片自身的毛玻璃模糊
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+
+  // 3. 柔和大阴影
+  box-shadow: 
+    20px 20px 60px rgba(0, 0, 0, 0.2), 
+    -20px -20px 60px rgba(255, 255, 255, 0.1);
+
+  // 4. 精致边框
+  border: 1px solid rgba(255, 255, 255, 0.2);
+
+  // 5. 圆角加大
+  border-radius: 20px;
+  
+  color: $gray;
+  overflow: hidden;
+
+  // 响应式
+  @media (max-width: 1000px) {
+    width: 100%;       
+    max-width: 500px;  
+    min-width: auto;   
+    height: auto;      
+    min-height: 550px; 
+    padding: 10px;
+    display: flex;     
+    justify-content: center;
+    align-items: center;
+  }
+}
+
+// --- 内部滑动容器 ---
+.container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: absolute;
+  top: 0;
+  width: 600px;
+  height: 100%;
+  padding: 25px;
+  background-color: $neu-1; // 这里保持实色，或者是根据需要改为透明
+  transition: $transition;
+
+  @media (max-width: 1000px) {
+    width: 100%;
+    position: relative;
+    height: auto;
+    left: 0 !important;
+    z-index: 10 !important;
+    
+    &.mobile_hidden {
+      display: none;
+    }
+  }
+}
+
+// --- 表单内容 ---
+.form {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  
+  @media (max-width: 1000px) {
+    padding: 20px 0;
+  }
+
+  &__input {
+    width: 350px;
+    height: 40px;
+    margin: 4px 0;
+    padding-left: 25px;
+    font-size: 13px;
+    letter-spacing: .15px;
+    border: none;
+    outline: none;
+    background-color: $neu-1;
+    transition: .25s ease;
+    border-radius: 8px;
+    // 输入框保持内阴影 Neumorphism 风格
+    box-shadow: inset 2px 2px 4px $neu-2, inset -2px -2px 4px $white;
+
+    &:focus {
+      box-shadow: inset 4px 4px 4px $neu-2, inset -4px -4px 4px $white;
+    }
+
+    @media (max-width: 1000px) {
+      width: 100%; 
+      max-width: 350px;
+    }
+  }
+
+  &__span {
+    margin-top: 30px;
+    margin-bottom: 12px;
+  }
+
+  &__link {
+    color: $black;
+    font-size: 15px;
+    margin-top: 25px;
+    border-bottom: 1px solid $gray;
+    line-height: 2;
+    cursor: pointer;
+  }
+}
+
+.title {
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 3;
+  color: $black;
+}
+
+.button {
+  width: 180px;
+  height: 50px;
+  border-radius: 25px;
+  margin-top: 50px;
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 1.15px;
+  background-color: $purple;
+  color: $white;
+  box-shadow: 8px 8px 16px $neu-2, -8px -8px 16px $white;
+  border: none;
+  outline: none;
+  cursor: pointer;
+}
+
+// 移动端切换文字
+.mobile_toggle_text {
+  display: none;
+  margin-top: 20px;
+  font-size: 14px;
+  
+  span {
+    color: $purple;
+    font-weight: 700;
+    cursor: pointer;
+    margin-left: 5px;
+    
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+
+  @media (max-width: 1000px) {
+    display: block;
+  }
+}
+
+// --- 动画辅助类 ---
+.a_container {
+  z-index: 100;
+  left: calc(100% - 600px);
+}
+
+.b_container {
+  left: calc(100% - 600px);
+  z-index: 0;
+}
+
+// --- 切换遮罩层 (Switch) ---
+.switch {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 400px;
+  padding: 50px;
+  z-index: 200;
+  transition: $transition;
+  background-color: $neu-1;
+  overflow: hidden;
+  box-shadow: 4px 4px 10px $neu-2, -4px -4px 10px $white;
+
+  @media (max-width: 1000px) {
+    display: none !important;
+  }
+
+  &__circle {
+    position: absolute;
+    width: 500px;
+    height: 500px;
+    border-radius: 50%;
+    background-color: $neu-1;
+    box-shadow: inset 8px 8px 12px $neu-2, inset -8px -8px 12px $white;
+    bottom: -60%;
+    left: -60%;
+    transition: $transition;
+
+    &--t {
+      top: -30%;
+      left: 60%;
+      width: 300px;
+      height: 300px;
+    }
+  }
+
+  &__container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    position: absolute;
+    width: 400px;
+    padding: 50px 55px;
+    transition: $transition;
+  }
+
+  &__button {
+    cursor: pointer;
+    &:hover {
+      box-shadow: 6px 6px 10px $neu-2, -6px -6px 10px $white;
+      transform: scale(.985);
+      transition: .25s;
+    }
+    &:active,
+    &:focus {
+      box-shadow: 2px 2px 6px $neu-2, -2px -2px 6px $white;
+      transform: scale(.97);
+      transition: .25s;
+    }
+  }
+}
+
+.description {
+  font-size: 14px;
+  letter-spacing: .25px;
+  text-align: center;
+  line-height: 1.6;
+}
+
+// --- 动画状态类 ---
+.is_txr {
+  left: calc(100% - 400px);
+  transform-origin: left;
+}
+.is_txl {
+  left: 0;
+  transform-origin: right;
+}
+.is_z200 {
+  z-index: 200;
+}
+.is_hidden {
+  visibility: hidden;
+  opacity: 0;
+  position: absolute;
+}
+.is_gx {
+  animation: is-gx $transition;
+}
+@keyframes is-gx {
+  0%, 10%, 100% { width: 400px; }
+  30%, 50% { width: 500px; }
+}

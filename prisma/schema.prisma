@@ -1,0 +1,58 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Video {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String?
+  videoUrl    String
+  coverUrl    String?
+  rating      Float    @default(0.0)
+  views       Int      @default(0)
+  
+  // --- 新增字段：视频类型 (一级分类) ---
+  type        String   @default("电影") // 例如：电影、电视剧、动漫
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  categories  Category[] // 这里存二级分类：动作、科幻...
+  tags        Tag[]      // 这里存标签：高分、经典...
+}
+
+model Category {
+  id     Int     @id @default(autoincrement())
+  name   String  @unique
+  videos Video[]
+}
+
+model Tag {
+  id     Int     @id @default(autoincrement())
+  name   String  @unique
+  videos Video[]
+}
+
+model Image {
+  id        Int      @id @default(autoincrement())
+  filename  String   // 文件名 (例如 cover-123.jpg)
+  url       String   @unique // 访问路径 (例如 /uploads/cover-123.jpg)
+  createdAt DateTime @default(now())
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String?
+  email     String   @unique
+  password  String   // 存放加密后的哈希密码
+  avatar    String?
+  role      String   @default("USER") // "USER" 或 "ADMIN"
+  createdAt DateTime @default(now())
+}
