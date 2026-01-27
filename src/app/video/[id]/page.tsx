@@ -1,70 +1,71 @@
-import React from 'react';
+'use client';
+
+import React, { useState, useEffect, use } from 'react';
+import { useRouter } from 'next/navigation';
 import { 
-  Search, User, PlayCircle, ThumbsUp, Share2, Star, Download, 
-  MoreHorizontal
+  ArrowLeft, Calendar, Play, Star, Tag, Clock, 
+  Share2, ThumbsUp, MessageSquare, Loader2, PlayCircle, MoreHorizontal, User, Search, Download
 } from 'lucide-react';
+import { getVideoById, getRelatedVideos } from '@/app/actions/video';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
-import UIPlayer from '@/components/UIPlayer';
-import { getVideoById, getRelatedVideos } from '@/app/actions/video'; 
 
-// --- 核心修复点：正确定义 Next.js 15 的 Props 类型 ---
-interface PageProps {
-  params: Promise<{ id: string }>;
-}
+// 引入统一 Header
+import Header from '@/components/Header';
+// 引入播放器组件
+import UIPlayer from '@/components/UIPlayer'; 
 
-export default async function VideoPage({ params }: PageProps) {
-  // 1. 等待 params 解析 (Next.js 15 必须步骤)
-  const resolvedParams = await params;
-  const videoId = Number(resolvedParams.id);
+export default function VideoDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const router = useRouter();
+  // Next.js 15: 使用 use() 解包 params
+  const { id } = use(params); 
+  const videoId = Number(id);
 
-  // 安全检查：如果 ID 不是有效数字，直接返回 404
-  if (isNaN(videoId)) {
-    return notFound();
+  const [video, setVideo] = useState<any>(null);
+  const [relatedVideos, setRelatedVideos] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      // 获取视频详情
+      const data = await getVideoById(videoId);
+      if (data) {
+        setVideo(data);
+        // 获取相关推荐
+        const related = await getRelatedVideos(videoId, data.type);
+        setRelatedVideos(related);
+      }
+      setLoading(false);
+    };
+    fetchData();
+  }, [videoId]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#0d1117] flex items-center justify-center">
+        <Loader2 className="animate-spin text-blue-500" size={32} />
+      </div>
+    );
   }
-  
-  // 2. 从数据库获取视频详情
-  const video = await getVideoById(videoId);
-  
-  // 如果找不到视频，返回 404
+
   if (!video) {
-    return notFound();
+    return (
+      <div className="min-h-screen bg-[#0d1117] flex flex-col items-center justify-center text-gray-400">
+        <p>视频未找到</p>
+        <button onClick={() => router.back()} className="mt-4 text-blue-500 hover:underline">返回上一页</button>
+      </div>
+    );
   }
-
-  // 3. 获取相关推荐
-  const relatedVideos = await getRelatedVideos(videoId, video.type);
 
   return (
     <div className="min-h-screen bg-[#0d1117] text-gray-200 font-sans">
       
-      {/* 顶部导航 */}
-      <header className="h-16 flex items-center justify-between px-6 bg-[#161b22] border-b border-white/5 sticky top-0 z-50">
-        <div className="flex items-center gap-6">
-          <Link href="/" className="flex items-center gap-1 text-gray-400 hover:text-white transition-colors">
-            <div className="w-8 h-8 bg-gradient-to-tr from-green-400 to-blue-500 rounded-lg flex items-center justify-center font-bold text-white text-sm">K</div>
-            <span className="font-bold text-lg hidden md:block">Kali<span className="text-blue-500">Video</span></span>
-          </Link>
-          <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-gray-400">
-            <Link href="/" className="hover:text-white">首页</Link>
-            <span className="text-white cursor-default">{video.type}</span>
-          </nav>
-        </div>
-        
-        <div className="flex items-center gap-4">
-           <div className="relative hidden md:block">
-              <input type="text" placeholder="搜索..." className="bg-black/20 border border-white/10 rounded-full px-4 py-1.5 text-sm w-48 focus:outline-none focus:border-blue-500 transition-colors" />
-              <Search size={14} className="absolute right-3 top-2 text-gray-500" />
-           </div>
-           <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center border border-gray-600">
-             <User size={16} />
-           </div>
-        </div>
-      </header>
+      {/* 1. 统一的 Header (不传搜索props，保持默认样式) */}
+      <Header />
 
       {/* 主体内容 */}
       <div className="max-w-[1800px] mx-auto p-4 lg:p-6 flex flex-col lg:flex-row gap-6">
         
-        {/* 左侧：播放器 */}
+        {/* 左侧：播放器与信息 */}
         <div className="flex-1 min-w-0">
           <div className="mb-4">
             <h1 className="text-2xl font-bold text-white mb-2 flex items-center gap-2">
@@ -73,15 +74,17 @@ export default async function VideoPage({ params }: PageProps) {
             </h1>
             <div className="flex items-center gap-4 text-xs text-gray-400">
               <span className="flex items-center gap-1 text-green-400"><PlayCircle size={12}/> {video.views} 播放</span>
-              <span>{video.createdAt.toLocaleDateString()}</span>
+              <span>{video.createdAt ? new Date(video.createdAt).toLocaleDateString() : '未知日期'}</span>
               <span className="flex items-center gap-1 text-yellow-500"><Star size={12} fill="currentColor"/> {video.rating}</span>
             </div>
           </div>
 
+          {/* 播放器容器 */}
           <div className="w-full aspect-video bg-black rounded-xl overflow-hidden shadow-2xl border border-white/5 mb-4">
             <UIPlayer url={video.videoUrl} /> 
           </div>
 
+          {/* 工具栏 */}
           <div className="flex items-center justify-between py-2 border-b border-white/5 pb-6">
             <div className="flex items-center gap-6">
               <button className="flex items-center gap-2 text-gray-400 hover:text-green-400 transition"><ThumbsUp size={20} /> <span className="text-sm">点赞</span></button>
@@ -92,7 +95,7 @@ export default async function VideoPage({ params }: PageProps) {
             <button className="text-gray-500 hover:text-white"><MoreHorizontal size={20} /></button>
           </div>
 
-          {/* 评论区 (静态) */}
+          {/* 评论区 (静态示例) */}
           <div className="mt-6">
             <h3 className="font-bold text-lg mb-4">评论</h3>
             <div className="flex gap-4 mb-6">
@@ -110,10 +113,10 @@ export default async function VideoPage({ params }: PageProps) {
         {/* 右侧：侧边栏 */}
         <div className="w-full lg:w-[380px] shrink-0 flex flex-col gap-4">
           
-          {/* 简介 */}
+          {/* 简介卡片 */}
           <div className="bg-[#161b22] rounded-xl p-4 border border-white/5">
             <div className="flex justify-between items-start mb-2">
-               <h2 className="font-bold text-lg text-white">{video.title}</h2>
+               <h2 className="font-bold text-lg text-white">详情</h2>
                <div className="flex items-baseline gap-1 text-green-500">
                   <span className="text-xl font-bold font-mono">{video.rating}</span>
                   <span className="text-xs">分</span>
@@ -124,12 +127,12 @@ export default async function VideoPage({ params }: PageProps) {
                  <span key={tag.id} className="border border-white/10 px-1.5 py-0.5 rounded">{tag.name}</span>
                ))}
             </div>
-            <p className="text-sm text-gray-400 line-clamp-3 leading-relaxed">
+            <p className="text-sm text-gray-400 line-clamp-6 leading-relaxed">
               {video.description || "暂无简介"}
             </p>
           </div>
 
-          {/* 推荐 */}
+          {/* 相关推荐列表 */}
           <div className="bg-[#161b22] rounded-xl p-4 border border-white/5">
             <h3 className="font-bold text-white mb-4">相关推荐</h3>
             <div className="flex flex-col gap-4">

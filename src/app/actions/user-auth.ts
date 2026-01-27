@@ -89,3 +89,19 @@ export async function logoutUser() {
   const cookieStore = await cookies();
   cookieStore.delete('kali_user_token');
 }
+
+export async function getSession() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get('kali_user_token')?.value;
+
+  if (!token) return null;
+
+  try {
+    // 因为我们在 loginUser 里是用 JSON.stringify 存的，所以这里直接 parse
+    // 如果你以后用了 JWT，这里需要 jwt.verify
+    const user = JSON.parse(token);
+    return user; 
+  } catch (error) {
+    return null;
+  }
+}
