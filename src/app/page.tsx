@@ -1,226 +1,117 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { 
-  Home, Compass, MonitorPlay, Film, Tv, FileText, Search, PlayCircle, Loader2, Flame
-} from 'lucide-react';
+import React from 'react';
 import Link from 'next/link';
-import { getVideos } from '@/app/actions/video'; 
-
-// 引入拆分出去的 Header 组件
+import { 
+  Film, Music, Gamepad2, Package, 
+  ArrowRight, Sparkles 
+} from 'lucide-react';
 import Header from '@/components/Header';
 
-// --- VideoCover 组件 (保持不变) ---
-const VideoCover = ({ src, title }: { src?: string | null, title: string }) => {
-  const [error, setError] = useState(false);
-
-  if (!src || error) {
-    return (
-      <div className="w-full h-full flex items-center justify-center bg-gray-800 text-gray-600">
-        <div className="flex flex-col items-center gap-2">
-          <PlayCircle size={32} />
-        </div>
-      </div>
-    );
+// 专区配置
+const zones = [
+  {
+    id: 'movies',
+    title: '影视专区',
+    desc: '高清电影、电视剧、动漫、纪录片在线观看',
+    icon: Film,
+    color: 'from-blue-500 to-cyan-400',
+    href: '/movies', // 路由指向刚才移动的页面
+    bgImage: 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?q=80&w=1000&auto=format&fit=crop'
+  },
+  {
+    id: 'software',
+    title: '软件仓库',
+    desc: 'Windows / Mac 破解软件、生产力工具下载',
+    icon: Package,
+    color: 'from-emerald-500 to-green-400',
+    href: '/software', // 这是一个待开发的路由
+    bgImage: 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?q=80&w=1000&auto=format&fit=crop'
+  },
+  {
+    id: 'games',
+    title: '游戏殿堂',
+    desc: '3A 大作、独立游戏、复古模拟器资源',
+    icon: Gamepad2,
+    color: 'from-purple-500 to-pink-500',
+    href: '/games',
+    bgImage: 'https://images.unsplash.com/photo-1538481199705-c710c4e965fc?q=80&w=1000&auto=format&fit=crop'
+  },
+  {
+    id: 'music',
+    title: '无损音乐',
+    desc: 'Hi-Res 音质、黑胶转录、发烧友聚集地',
+    icon: Music,
+    color: 'from-orange-500 to-yellow-400',
+    href: '/music',
+    bgImage: 'https://images.unsplash.com/photo-1511379938547-c1f69419868d?q=80&w=1000&auto=format&fit=crop'
   }
-
-  return (
-    <img 
-      src={src} 
-      alt={title} 
-      referrerPolicy="no-referrer"
-      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-      onError={() => setError(true)} 
-    />
-  );
-};
-
-// --- 分类配置 (保持不变) ---
-const categories = [
-  { name: '首页', icon: Home },
-  { name: '电视剧', icon: Tv },
-  { name: '电影', icon: Film },
-  { name: '动漫', icon: MonitorPlay },
-  { name: '综艺', icon: Compass },
-  { name: '纪录片', icon: FileText },
 ];
 
-export default function VideoPortal() {
-  const [activeTab, setActiveTab] = useState('首页');
-  const [videos, setVideos] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  
-  // 搜索状态 (保留在父组件，因为需要控制 activeTab 和数据获取)
-  const [searchText, setSearchText] = useState('');
-  const [isSearching, setIsSearching] = useState(false); 
-
-  const fetchData = async (category: string, search: string) => {
-    setLoading(true);
-    // 真实的 API 调用
-    const data = await getVideos(category, search);
-    setVideos(data || []); // 确保 data 是数组
-    setLoading(false);
-  };
-
-  useEffect(() => {
-    if (!isSearching) {
-      fetchData(activeTab, '');
-    }
-  }, [activeTab, isSearching]);
-
-  // 处理搜索回车事件
-  const handleSearch = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      if (!searchText.trim()) return;
-      setIsSearching(true);
-      setActiveTab(''); 
-      fetchData('', searchText);
-    }
-  };
-
-  // 处理分类点击 (同时也用于清空搜索状态)
-  const handleCategoryClick = (categoryName: string) => {
-    setActiveTab(categoryName);
-    setIsSearching(false); 
-    setSearchText('');
-  };
-
+export default function PortalPage() {
   return (
-    <div className="min-h-screen bg-[#0d1117] text-gray-200 flex font-sans selection:bg-teal-500/30 relative">
+    <div className="min-h-screen bg-[#0d1117] text-gray-200 font-sans flex flex-col">
       
-      {/* 侧边栏 */}
-      <aside className="w-60 h-screen sticky top-0 bg-[#0d1117] flex flex-col border-r border-white/5 py-6 pl-4 pr-2 shrink-0 hidden md:flex">
-        <div className="px-4 mb-8 flex items-center gap-2">
-          <div className="w-8 h-8 bg-gradient-to-tr from-green-400 to-blue-500 rounded-lg flex items-center justify-center font-bold text-white">
-            K
-          </div>
-          <span className="text-xl font-bold tracking-tight text-white">Kali<span className="text-blue-500">Video</span></span>
-        </div>
+      {/* 统一 Header，不显示具体搜索框，因为这是聚合页 */}
+      <Header showSearch={false} />
 
-        <nav className="flex-1 space-y-1">
-          {categories.map((cat) => (
-            <button
-              key={cat.name}
-              onClick={() => handleCategoryClick(cat.name)}
-              className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all duration-200 group ${
-                activeTab === cat.name 
-                  ? 'bg-gradient-to-r from-green-500/20 to-transparent text-green-400 font-bold border-l-2 border-green-500' 
-                  : 'text-gray-400 hover:bg-white/5 hover:text-white'
-              }`}
-            >
-              <cat.icon size={20} className={activeTab === cat.name ? "text-green-400" : "group-hover:text-white"} />
-              <span>{cat.name}</span>
-            </button>
-          ))}
-        </nav>
-
-        <div className="mt-auto px-4 py-4 text-xs text-gray-600 space-y-2">
-          <p>关于我们 • 合作</p>
-          <p>© 2025 KaliVideo Dev</p>
-        </div>
-      </aside>
-
-      {/* 主内容 */}
-      <main className="flex-1 min-w-0 flex flex-col">
+      <main className="flex-1 flex flex-col items-center justify-center p-6 lg:p-12">
         
-        {/* 1. 引用统一的 Header 组件 */}
-        {/* 将搜索状态和处理函数传递给 Header */}
-        <Header 
-          searchText={searchText} 
-          setSearchText={setSearchText} 
-          onSearch={handleSearch} 
-        />
-
-        <div className="flex-1 overflow-y-auto p-6 lg:p-8 scroll-smooth">
-          
-          {/* 首页 Banner 区 */}
-          {!isSearching && activeTab === '首页' && (
-            <div className="w-full aspect-[21/9] md:aspect-[32/9] bg-gradient-to-r from-gray-900 to-gray-800 rounded-2xl mb-10 relative overflow-hidden group cursor-pointer border border-white/5">
-               <img src="https://images.unsplash.com/photo-1626814026160-2237a95fc5a0?q=80&w=1600&auto=format&fit=crop" className="absolute inset-0 w-full h-full object-cover opacity-60" />
-               <div className="absolute inset-0 flex flex-col justify-end p-8 bg-gradient-to-t from-[#0d1117] via-transparent">
-                  <h2 className="text-4xl font-bold text-white mb-2">欢迎来到 KaliVideo</h2>
-                  <p className="text-gray-300">私有部署的高性能影视库</p>
-               </div>
-            </div>
-          )}
-
-          {/* 标题栏 */}
-          <div className="flex items-center gap-2 mb-6">
-            {isSearching ? (
-              <>
-                <Search className="text-blue-500" size={24} />
-                <h2 className="text-xl font-bold text-white">
-                  "{searchText}" 的搜索结果 <span className="text-sm font-normal text-gray-500 ml-2">({videos.length})</span>
-                </h2>
-              </>
-            ) : (
-              <>
-                <Flame className="text-red-500" fill="currentColor" />
-                <h2 className="text-xl font-bold text-white">{activeTab === '首页' ? '最新推荐' : activeTab}</h2>
-              </>
-            )}
+        {/* 欢迎标语 */}
+        <div className="text-center mb-16 space-y-4 animate-in fade-in slide-in-from-bottom-8 duration-700">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 text-blue-400 text-xs font-bold border border-blue-500/20 mb-2">
+            <Sparkles size={12} />
+            <span>资源聚合 · 极速下载 · 永久免费</span>
           </div>
+          <h1 className="text-4xl md:text-6xl font-bold text-white tracking-tight">
+            探索无限 <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">数字资源</span>
+          </h1>
+          <p className="text-gray-400 max-w-2xl mx-auto text-lg">
+            KaliRes 是一个综合性资源分享平台。无论你想看电影、找软件、玩游戏还是听音乐，这里都是你的终点站。
+          </p>
+        </div>
 
-          {/* 视频列表内容 */}
-          {loading ? (
-            <div className="flex items-center justify-center h-40">
-              <Loader2 className="animate-spin text-blue-500" size={32} />
-            </div>
-          ) : (
-            <>
-              {videos.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20 text-gray-500">
-                  <Search size={48} className="opacity-20 mb-4" />
-                  <p>{isSearching ? '没有找到相关视频' : '该分类下暂无视频'}</p>
+        {/* 专区卡片网格 */}
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 w-full max-w-7xl">
+          {zones.map((zone, index) => (
+            <Link 
+              key={zone.id} 
+              href={zone.href}
+              className="group relative h-[320px] rounded-3xl overflow-hidden border border-white/5 shadow-2xl hover:shadow-blue-900/20 transition-all duration-500 hover:-translate-y-2"
+            >
+              {/* 背景图 */}
+              <div className="absolute inset-0">
+                <img 
+                  src={zone.bgImage} 
+                  className="w-full h-full object-cover opacity-40 group-hover:opacity-60 group-hover:scale-110 transition-all duration-700" 
+                  alt={zone.title}
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#0d1117] via-[#0d1117]/50 to-transparent" />
+              </div>
+
+              {/* 内容 */}
+              <div className="absolute inset-0 p-8 flex flex-col justify-end">
+                <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${zone.color} flex items-center justify-center text-white mb-4 shadow-lg group-hover:scale-110 transition-transform duration-300`}>
+                  <zone.icon size={24} />
                 </div>
-              ) : (
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-x-4 gap-y-8">
-                  {videos.map((video) => (
-                    <Link 
-                      key={video.id} 
-                      href={`/video/${video.id}`}
-                      className="group cursor-pointer flex flex-col gap-2"
-                    >
-                      <div className="relative aspect-[3/4] rounded-lg overflow-hidden border border-white/5 shadow-lg bg-gray-900">
-                        
-                        <VideoCover src={video.coverUrl} title={video.title} />
-                        
-                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
-                          <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center text-white shadow-lg scale-0 group-hover:scale-100 transition-transform duration-300">
-                            <PlayCircle size={24} fill="currentColor" />
-                          </div>
-                        </div>
-
-                        <div className="absolute top-2 right-2 bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md shadow-sm">
-                          {video.type}
-                        </div>
-                        
-                        <div className="absolute bottom-0 left-0 right-0 h-1/2 bg-gradient-to-t from-black/90 to-transparent flex items-end p-2 pointer-events-none">
-                          <span className="text-xs text-gray-300 flex items-center gap-1">
-                            <PlayCircle size={10} /> {video.views}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div>
-                        <h3 className="text-sm font-bold text-gray-200 group-hover:text-green-400 transition-colors line-clamp-1">
-                          {video.title}
-                        </h3>
-                        <p className="text-xs text-gray-500 mt-0.5 line-clamp-1 group-hover:text-gray-400">
-                          {video.description || '暂无简介'}
-                        </p>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-          
-          <div className="h-20"></div>
-
+                
+                <h3 className="text-2xl font-bold text-white mb-2 flex items-center gap-2">
+                  {zone.title}
+                  <ArrowRight size={18} className="opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300 text-gray-300" />
+                </h3>
+                
+                <p className="text-gray-400 text-sm line-clamp-2 group-hover:text-gray-200 transition-colors">
+                  {zone.desc}
+                </p>
+              </div>
+            </Link>
+          ))}
         </div>
       </main>
+
+      <footer className="py-8 text-center text-gray-600 text-sm">
+        &copy; 2025 KaliRes Team. All rights reserved.
+      </footer>
     </div>
   );
 }

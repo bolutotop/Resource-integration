@@ -1,10 +1,15 @@
-// app/layout.tsx
 import type { Metadata } from "next";
-import { Montserrat } from "next/font/google"; // 引入 Next.js 字体优化
+import { Inter } from "next/font/google";
 import "./globals.css";
+// 引入 Provider
+import { AuthModalProvider } from '@/context/AuthModalContext';
 
-// 配置字体
-const montserrat = Montserrat({ subsets: ["latin"] });
+const inter = Inter({ subsets: ["latin"] });
+
+export const metadata: Metadata = {
+  title: "KaliRes - 综合资源站",
+  description: "影视、软件、游戏、音乐聚合平台",
+};
 
 export default function RootLayout({
   children,
@@ -13,8 +18,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      {/* 将字体类名应用到 body */}
-      <body className={montserrat.className}>{children}</body>
+      <body className={inter.className}>
+        {/* 包裹 Provider */}
+        <AuthModalProvider>
+          {children}
+        </AuthModalProvider>
+      </body>
     </html>
   );
 }

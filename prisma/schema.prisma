@@ -1,5 +1,3 @@
-// prisma/schema.prisma
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,6 +6,8 @@ datasource db {
   provider = "sqlite"
   url      = env("DATABASE_URL")
 }
+
+// --- Content Models ---
 
 model Video {
   id          Int      @id @default(autoincrement())
@@ -18,14 +18,18 @@ model Video {
   rating      Float    @default(0.0)
   views       Int      @default(0)
   
-  // --- 新增字段：视频类型 (一级分类) ---
-  type        String   @default("电影") // 例如：电影、电视剧、动漫
+  // --- Video Type (Primary Classification) ---
+  type        String   @default("电影") // e.g., Movie, Series, Anime
   
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  categories  Category[] // 这里存二级分类：动作、科幻...
-  tags        Tag[]      // 这里存标签：高分、经典...
+  categories  Category[] // Secondary Classification
+  tags        Tag[]      // Tags
+
+  // --- Likes Logic ---
+  likesCount  Int      @default(0) // Cache for total likes
+  likes       Like[]   // Relation: Likes received by video
 }
 
 model Category {
@@ -42,17 +46,89 @@ model Tag {
 
 model Image {
   id        Int      @id @default(autoincrement())
-  filename  String   // 文件名 (例如 cover-123.jpg)
-  url       String   @unique // 访问路径 (例如 /uploads/cover-123.jpg)
+  filename  String   // File name
+  url       String   @unique // Access path
   createdAt DateTime @default(now())
 }
+
+// --- User & Interaction Models ---
 
 model User {
   id        Int      @id @default(autoincrement())
   name      String?
   email     String   @unique
-  password  String   // 存放加密后的哈希密码
+  password  String   // Hashed password
   avatar    String?
-  role      String   @default("USER") // "USER" 或 "ADMIN"
+  role      String   @default("USER") // "USER" or "ADMIN"
   createdAt DateTime @default(now())
+
+  // --- Relations ---
+  likes     Like[]     // User's given likes
+  history   History[]  // User's browsing history
+  favorites Favorite[] // User's favorites (New)
+}
+
+// --- Like Relation (Specific to Videos) ---
+model Like {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  videoId   Int
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  video     Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  // Constraint: One like per user per video
+  @@unique([userId, videoId])
+}
+
+// --- Generic History (Snapshot Style) ---
+model History {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  
+  // Core Reference Data
+  targetId   Int      // Resource ID
+  targetType String   // "MOVIE", "SOFTWARE", "GAME", "MUSIC"
+  
+  // Snapshot Data (Fast read without joins)
+  title      String
+  coverUrl   String?
+  routeUrl   String   // e.g., "/video/1"
+
+  visitedAt  DateTime @default(now())
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Unique constraint for Upsert logic
+  @@unique([userId, targetId, targetType])
+  
+  // Index for querying: Filter by User, Sort by Time
+  @@index([userId, visitedAt])
+}
+
+// --- Generic Favorites (Snapshot Style) ---
+// Similar design to History to support multiple resource types
+model Favorite {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  
+  // Core Reference Data
+  targetId   Int
+  targetType String   // "MOVIE", "SOFTWARE", "GAME", "MUSIC"
+  
+  // Snapshot Data
+  title      String
+  coverUrl   String?
+  routeUrl   String
+
+  createdAt  DateTime @default(now()) 
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Unique constraint: Prevent duplicate bookmarks
+  @@unique([userId, targetId, targetType])
+  
+  // Index: Filter by User, Sort by Added Time
+  @@index([userId, createdAt])
 }
