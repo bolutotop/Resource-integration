@@ -65,7 +65,8 @@ model User {
   // --- Relations ---
   likes     Like[]     // User's given likes
   history   History[]  // User's browsing history
-  favorites Favorite[] // User's favorites (New)
+  favorites Favorite[] // User's favorites
+  comments  Comment[]  // <--- 新增：关联用户发表的评论
 }
 
 // --- Like Relation (Specific to Videos) ---
@@ -108,7 +109,6 @@ model History {
 }
 
 // --- Generic Favorites (Snapshot Style) ---
-// Similar design to History to support multiple resource types
 model Favorite {
   id         Int      @id @default(autoincrement())
   userId     Int
@@ -131,4 +131,31 @@ model Favorite {
   
   // Index: Filter by User, Sort by Added Time
   @@index([userId, createdAt])
+}
+
+// --- 新增：通用评论表 (Generic Comment System) ---
+model Comment {
+  id         Int      @id @default(autoincrement())
+  content    String   // SQLite 中 String 默认即为 Text，无需 @db.Text
+  
+  userId     Int
+  
+  // 核心解耦字段 (Polymorphic-like association)
+  targetId   Int
+  targetType String   // e.g., "MOVIE", "SOFTWARE", "GAME"
+  
+  // 支持回复 (自关联)
+  parentId   Int?     
+  
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // 父子评论关联
+  parent     Comment?  @relation("ReplyTo", fields: [parentId], references: [id], onDelete: Cascade)
+  children   Comment[] @relation("ReplyTo")
+
+  // 索引优化：通常是查询某个资源下的所有评论
+  @@index([targetId, targetType]) 
 }

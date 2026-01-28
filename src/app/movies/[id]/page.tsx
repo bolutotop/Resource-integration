@@ -10,7 +10,7 @@ import {
   PlayCircle, 
   Share2, 
   MessageSquare,
-  Heart // 1. Added Heart icon
+  Heart
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -18,6 +18,8 @@ import Link from 'next/link';
 import Header from '@/components/Header';
 // 引入播放器组件
 import UIPlayer from '@/components/UIPlayer'; 
+// 引入评论组件 (New)
+import CommentSection from '@/components/CommentSection';
 
 // 引入 Action
 import { 
@@ -33,7 +35,7 @@ import { useAuthModal } from '@/context/AuthModalContext';
 // 引入历史记录 Hook
 import { useRecordHistory } from '@/hooks/useRecordHistory';
 
-// 2. Added useFavorite Hook
+// 引入收藏 Hook
 import { useFavorite } from '@/hooks/useFavorite';
 
 export default function VideoDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -64,7 +66,7 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
     enable: !!video 
   });
 
-  // --- 3. 集成收藏功能 ---
+  // --- 收藏功能 ---
   const { isFavorited, handleToggleFavorite } = useFavorite({
     id: videoId,
     type: 'MOVIE',
@@ -167,12 +169,12 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
             {/* 左侧主要内容区 (占2列) */}
             <div className="lg:col-span-2 space-y-6">
               
-              {/* 播放器容器 */}
+              {/* 1. 播放器容器 */}
               <div className="aspect-video bg-black rounded-xl overflow-hidden shadow-2xl relative group border border-white/5">
                  <UIPlayer url={video.videoUrl} />
               </div>
               
-              {/* 标题与操作栏 */}
+              {/* 2. 标题、操作栏与简介 */}
               <div>
                 <h1 className="text-2xl md:text-3xl font-bold text-white mb-3">{video.title}</h1>
                 
@@ -205,7 +207,7 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
                         <span>{likesCount > 0 ? likesCount : '点赞'}</span>
                       </button>
 
-                      {/* 4. 新增：收藏按钮 */}
+                      {/* 收藏按钮 */}
                       <button 
                         onClick={handleToggleFavorite}
                         className={`flex items-center gap-2 px-4 py-2 rounded-full font-medium transition-all active:scale-95 border ${
@@ -235,6 +237,10 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
                    </p>
                 </div>
               </div>
+
+              {/* 3. 评论区模块 (New) */}
+              <CommentSection targetId={videoId} targetType="MOVIE" />
+
             </div>
 
             {/* 右侧：相关推荐 (占1列) */}
