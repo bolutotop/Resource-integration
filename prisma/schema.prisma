@@ -7,29 +7,31 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// --- Content Models ---
+// --- 内容模型 ---
 
 model Video {
   id          Int      @id @default(autoincrement())
   title       String
-  description String?
-  videoUrl    String
+  // 注意：SQLite 中 String 默认就是 Text，不支持 @db.Text，直接使用 String 即可
+  description String? 
+  videoUrl    String   @default("") 
   coverUrl    String?
+  type        String   @default("电影")
   rating      Float    @default(0.0)
   views       Int      @default(0)
   
-  // --- Video Type (Primary Classification) ---
-  type        String   @default("电影") // e.g., Movie, Series, Anime
+  // --- 新增 & 优化字段 ---
+  sourceId    String?  @unique // 外部资源唯一 ID，用于防重
+  status      String?          // 连载、完结、预告等
   
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  categories  Category[] // Secondary Classification
-  tags        Tag[]      // Tags
-
-  // --- Likes Logic ---
-  likesCount  Int      @default(0) // Cache for total likes
-  likes       Like[]   // Relation: Likes received by video
+  // 关联关系
+  categories  Category[] 
+  tags        Tag[]      
+  likesCount  Int      @default(0) 
+  likes       Like[]   
 }
 
 model Category {
@@ -44,32 +46,23 @@ model Tag {
   videos Video[]
 }
 
-model Image {
-  id        Int      @id @default(autoincrement())
-  filename  String   // File name
-  url       String   @unique // Access path
-  createdAt DateTime @default(now())
-}
-
-// --- User & Interaction Models ---
+// --- 用户与交互模型 ---
 
 model User {
   id        Int      @id @default(autoincrement())
   name      String?
   email     String   @unique
-  password  String   // Hashed password
+  password  String   
   avatar    String?
-  role      String   @default("USER") // "USER" or "ADMIN"
+  role      String   @default("USER") 
   createdAt DateTime @default(now())
 
-  // --- Relations ---
-  likes     Like[]     // User's given likes
-  history   History[]  // User's browsing history
-  favorites Favorite[] // User's favorites
-  comments  Comment[]  // <--- 新增：关联用户发表的评论
+  likes     Like[]   
+  history   History[] 
+  favorites Favorite[] 
+  comments  Comment[]  
 }
 
-// --- Like Relation (Specific to Videos) ---
 model Like {
   id        Int      @id @default(autoincrement())
   userId    Int
@@ -79,72 +72,47 @@ model Like {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   video     Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
 
-  // Constraint: One like per user per video
   @@unique([userId, videoId])
 }
 
-// --- Generic History (Snapshot Style) ---
 model History {
   id         Int      @id @default(autoincrement())
   userId     Int
-  
-  // Core Reference Data
-  targetId   Int      // Resource ID
-  targetType String   // "MOVIE", "SOFTWARE", "GAME", "MUSIC"
-  
-  // Snapshot Data (Fast read without joins)
+  targetId   Int      
+  targetType String   
   title      String
   coverUrl   String?
-  routeUrl   String   // e.g., "/video/1"
-
+  routeUrl   String   
   visitedAt  DateTime @default(now())
 
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  // Unique constraint for Upsert logic
   @@unique([userId, targetId, targetType])
-  
-  // Index for querying: Filter by User, Sort by Time
   @@index([userId, visitedAt])
 }
 
-// --- Generic Favorites (Snapshot Style) ---
 model Favorite {
   id         Int      @id @default(autoincrement())
   userId     Int
-  
-  // Core Reference Data
   targetId   Int
-  targetType String   // "MOVIE", "SOFTWARE", "GAME", "MUSIC"
-  
-  // Snapshot Data
+  targetType String   
   title      String
   coverUrl   String?
   routeUrl   String
-
   createdAt  DateTime @default(now()) 
 
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  // Unique constraint: Prevent duplicate bookmarks
   @@unique([userId, targetId, targetType])
-  
-  // Index: Filter by User, Sort by Added Time
   @@index([userId, createdAt])
 }
 
-// --- 新增：通用评论表 (Generic Comment System) ---
 model Comment {
   id         Int      @id @default(autoincrement())
-  content    String   // SQLite 中 String 默认即为 Text，无需 @db.Text
-  
+  content    String   
   userId     Int
-  
-  // 核心解耦字段 (Polymorphic-like association)
   targetId   Int
-  targetType String   // e.g., "MOVIE", "SOFTWARE", "GAME"
-  
-  // 支持回复 (自关联)
+  targetType String   
   parentId   Int?     
   
   createdAt  DateTime @default(now())
@@ -152,10 +120,15 @@ model Comment {
 
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
-  // 父子评论关联
   parent     Comment?  @relation("ReplyTo", fields: [parentId], references: [id], onDelete: Cascade)
   children   Comment[] @relation("ReplyTo")
 
-  // 索引优化：通常是查询某个资源下的所有评论
   @@index([targetId, targetType]) 
+}
+
+model Image {
+  id        Int      @id @default(autoincrement())
+  filename  String   
+  url       String   @unique 
+  createdAt DateTime @default(now())
 }

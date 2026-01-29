@@ -10,53 +10,58 @@ import {
   PlayCircle, 
   Share2, 
   MessageSquare,
-  Heart
+  Heart,
+  Server,
+  Play,
+  Calendar,
+  Tag,
+  Info
 } from 'lucide-react';
 import Link from 'next/link';
 
-// 引入统一 Header
+// 组件引入
 import Header from '@/components/Header';
-// 引入播放器组件
-import UIPlayer from '@/components/UIPlayer'; 
-// 引入评论组件 (New)
 import CommentSection from '@/components/CommentSection';
 
-// 引入 Action
+// Action 引入
 import { 
   getVideoById, 
   getRelatedVideos, 
   toggleVideoLike, 
   getVideoLikeStatus 
 } from '@/app/actions/video';
+import { getScraperDetailData, getScraperVideo } from '@/app/actions/scraper'; 
 
-// 引入 Context Hook
+// Hook 引入
 import { useAuthModal } from '@/context/AuthModalContext';
-
-// 引入历史记录 Hook
 import { useRecordHistory } from '@/hooks/useRecordHistory';
-
-// 引入收藏 Hook
 import { useFavorite } from '@/hooks/useFavorite';
 
 export default function VideoDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
-  // Next.js 15: 使用 use() 解包 params
   const { id } = use(params); 
   const videoId = Number(id);
-
-  // 获取登录弹窗控制权
   const { openLoginModal } = useAuthModal(); 
 
+  // --- 基础状态 ---
   const [video, setVideo] = useState<any>(null);
   const [relatedVideos, setRelatedVideos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // --- 点赞状态管理 ---
+  // --- 爬虫数据状态 (播放列表 + 元数据) ---
+  const [detailData, setDetailData] = useState<any>(null);
+  const [activeSourceIndex, setActiveSourceIndex] = useState(0);
+  
+  // --- 播放器状态 ---
+  const [playingVideo, setPlayingVideo] = useState<{ url: string, type: 'native' | 'iframe' } | null>(null);
+  const [resolving, setResolving] = useState(false);
+
+  // --- 点赞状态 ---
   const [isLiked, setIsLiked] = useState(false);
   const [likesCount, setLikesCount] = useState(0);
   const [likeLoading, setLikeLoading] = useState(false);
 
-  // --- 历史记录集成 ---
+  // --- 钩子：历史记录与收藏 ---
   useRecordHistory({
     id: videoId,
     type: 'MOVIE',
@@ -66,7 +71,6 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
     enable: !!video 
   });
 
-  // --- 收藏功能 ---
   const { isFavorited, handleToggleFavorite } = useFavorite({
     id: videoId,
     type: 'MOVIE',
@@ -75,31 +79,33 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
     routeUrl: `/movies/${videoId}`
   });
 
+  // --- 初始化加载 ---
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // 1. 获取视频基本信息
         const data = await getVideoById(videoId);
-        
         if (data) {
           setVideo(data);
           
-          // 并行请求：相关推荐 & 点赞状态
-          const [related, likeStatus] = await Promise.all([
+          const promises = [
             getRelatedVideos(videoId, data.type),
-            getVideoLikeStatus(videoId)
-          ]);
+            getVideoLikeStatus(videoId),
+            data.sourceId ? getScraperDetailData(data.sourceId, 'Age') : null
+          ];
+
+          const [related, likeStatus, scraperRes] = await Promise.all(promises);
 
           setRelatedVideos(related || []);
-          
-          // 设置点赞初始状态
           if (likeStatus) {
             setIsLiked(likeStatus.isLiked);
             setLikesCount(likeStatus.likesCount);
           }
+          if (scraperRes?.success) {
+            setDetailData(scraperRes.data);
+          }
         }
       } catch (error) {
-        console.error("Failed to fetch video details:", error);
+        console.error("Failed to fetch data:", error);
       } finally {
         setLoading(false);
       }
@@ -107,40 +113,48 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
     fetchData();
   }, [videoId]);
 
-  // --- 处理点赞点击 (乐观更新 + 登录拦截) ---
+  // --- 核心播放逻辑 ---
+  const handlePlay = async (playUrl: string) => {
+    setResolving(true);
+    setPlayingVideo(null); 
+    try {
+      const res = await getScraperVideo(playUrl, 'Age');
+      if (res.success && res.data) {
+        setPlayingVideo(res.data);
+      } else {
+        alert("视频解析失败，请尝试切换线路");
+      }
+    } catch (err) {
+      console.error("Resolve error:", err);
+    } finally {
+      setResolving(false);
+    }
+  };
+
   const handleLike = async () => {
     if (likeLoading) return;
-    
     const prevIsLiked = isLiked;
     const prevCount = likesCount;
-    
     setIsLiked(!isLiked);
     setLikesCount(prev => isLiked ? prev - 1 : prev + 1);
     setLikeLoading(true);
 
     try {
       const res = await toggleVideoLike(videoId);
-      
       if (!res.success) {
         setIsLiked(prevIsLiked);
         setLikesCount(prevCount);
-
-        if (res.message === "请先登录") {
-          openLoginModal();
-        } else {
-          console.error(res.message);
-        }
+        if (res.message === "请先登录") openLoginModal();
       }
     } catch (error) {
       setIsLiked(prevIsLiked);
       setLikesCount(prevCount);
-      console.error("Like toggle failed:", error);
     } finally {
       setLikeLoading(false);
     }
   };
 
-  if (loading) {
+  if (loading && !video) {
     return (
       <div className="min-h-screen bg-[#0d1117] flex items-center justify-center">
         <Loader2 className="animate-spin text-blue-500" size={32} />
@@ -148,133 +162,186 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
     );
   }
 
-  if (!video) {
-    return (
-      <div className="min-h-screen bg-[#0d1117] flex flex-col items-center justify-center text-gray-400">
-        <p>视频未找到</p>
-        <button onClick={() => router.back()} className="mt-4 text-blue-500 hover:underline flex items-center gap-1">
-          <ArrowLeft size={16}/> 返回上一页
-        </button>
-      </div>
-    );
-  }
+  if (!video) return <div className="min-h-screen bg-[#0d1117] text-gray-400 flex items-center justify-center">视频未找到</div>;
+
+  const playlists = detailData?.playlists || [];
+  const metadata = detailData?.metadata || {};
 
   return (
     <div className="min-h-screen bg-[#0d1117] text-gray-200 font-sans">
       <Header />
 
       <div className="max-w-[1600px] mx-auto p-6 lg:p-8">
-         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          
+          {/* 左侧：内容区 */}
+          <div className="lg:col-span-2 space-y-6">
             
-            {/* 左侧主要内容区 (占2列) */}
-            <div className="lg:col-span-2 space-y-6">
-              
-              {/* 1. 播放器容器 */}
-              <div className="aspect-video bg-black rounded-xl overflow-hidden shadow-2xl relative group border border-white/5">
-                 <UIPlayer url={video.videoUrl} />
-              </div>
-              
-              {/* 2. 标题、操作栏与简介 */}
-              <div>
-                <h1 className="text-2xl md:text-3xl font-bold text-white mb-3">{video.title}</h1>
-                
-                <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-                   <div className="flex items-center gap-4 text-sm text-gray-400">
-                      <span className="flex items-center gap-1 text-yellow-500">
-                        <Star size={16} fill="currentColor" /> {Number(video.rating).toFixed(1)}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <PlayCircle size={16} /> {video.views} 次播放
-                      </span>
-                      <span className="bg-[#161b22] px-2 py-0.5 rounded border border-white/10 text-xs">
-                        {video.type}
-                      </span>
-                   </div>
-
-                   {/* --- 操作按钮组 --- */}
-                   <div className="flex items-center gap-3">
-                      {/* 点赞按钮 */}
-                      <button 
-                        onClick={handleLike}
-                        disabled={likeLoading}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-full font-medium transition-all active:scale-95 ${
-                          isLiked 
-                            ? 'bg-blue-600/20 text-blue-400 border border-blue-500/50' 
-                            : 'bg-[#161b22] text-gray-300 hover:bg-[#1f262e] border border-white/10'
-                        }`}
-                      >
-                        <ThumbsUp size={18} fill={isLiked ? "currentColor" : "none"} className={isLiked ? "animate-[bounce_0.4s_ease-in-out]" : ""} />
-                        <span>{likesCount > 0 ? likesCount : '点赞'}</span>
-                      </button>
-
-                      {/* 收藏按钮 */}
-                      <button 
-                        onClick={handleToggleFavorite}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-full font-medium transition-all active:scale-95 border ${
-                          isFavorited
-                            ? 'bg-pink-600/20 text-pink-400 border-pink-500/50'
-                            : 'bg-[#161b22] text-gray-300 hover:bg-[#1f262e] border-white/10'
-                        }`}
-                      >
-                        <Heart size={18} fill={isFavorited ? "currentColor" : "none"} className={isFavorited ? "animate-pulse" : ""} />
-                        <span>{isFavorited ? '已收藏' : '收藏'}</span>
-                      </button>
-
-                      {/* 分享按钮 */}
-                      <button className="flex items-center gap-2 px-4 py-2 bg-[#161b22] hover:bg-[#1f262e] text-gray-300 rounded-full border border-white/10 transition-colors">
-                        <Share2 size={18} /> <span className="hidden sm:inline">分享</span>
-                      </button>
-                   </div>
+            {/* 1. 播放器渲染 */}
+            <div className="aspect-video bg-black rounded-xl overflow-hidden shadow-2xl relative border border-white/5 flex items-center justify-center">
+              {resolving ? (
+                <div className="flex flex-col items-center gap-3 text-blue-400">
+                  <Loader2 size={40} className="animate-spin" />
+                  <span className="text-sm font-medium">正在解析视频地址...</span>
                 </div>
-
-                {/* 简介卡片 */}
-                <div className="bg-[#161b22] rounded-xl p-6 border border-white/5">
-                   <h3 className="text-white font-bold mb-2 flex items-center gap-2">
-                     <MessageSquare size={18} className="text-blue-500"/> 剧情简介
-                   </h3>
-                   <p className="text-gray-400 leading-relaxed text-sm whitespace-pre-wrap">
-                     {video.description || '暂无简介...'}
-                   </p>
+              ) : playingVideo ? (
+                playingVideo.type === 'iframe' ? (
+                  /* 1. Iframe 模式 */
+                  <iframe 
+                    src={playingVideo.url} 
+                    className="w-full h-full" 
+                    allowFullScreen 
+                    scrolling="no" 
+                    frameBorder="0"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  /* 2. 原生 Video 模式 */
+                  <video 
+                    src={playingVideo.url} 
+                    controls 
+                    autoPlay 
+                    className="w-full h-full" 
+                    // --- 新增：关键属性 ---
+                    referrerPolicy="no-referrer" 
+                    // 允许跨域
+                    crossOrigin="anonymous" 
+                  />
+                )
+              ) : (
+                <div className="text-center text-gray-500 group">
+                  <Play size={48} className="mx-auto mb-2 opacity-20 group-hover:scale-110 transition-transform" />
+                  <p>请在下方选择集数开始播放</p>
                 </div>
-              </div>
-
-              {/* 3. 评论区模块 (New) */}
-              <CommentSection targetId={videoId} targetType="MOVIE" />
-
+              )}
             </div>
 
-            {/* 右侧：相关推荐 (占1列) */}
+            {/* 2. 标题与动态元数据 */}
             <div className="space-y-4">
-              <h3 className="text-lg font-bold text-white mb-4 pl-1 border-l-4 border-blue-500 leading-none">猜你喜欢</h3>
+              <h1 className="text-2xl md:text-3xl font-bold text-white">{video.title}</h1>
               
-              <div className="flex flex-col gap-4">
-                {relatedVideos.length > 0 ? relatedVideos.map((item) => (
-                  <Link key={item.id} href={`/movies/${item.id}`} className="flex gap-3 group">
-                      <div className="w-40 aspect-video bg-gray-800 rounded-lg overflow-hidden relative shrink-0 border border-white/5">
-                         {item.coverUrl ? (
-                           <img src={item.coverUrl} alt={item.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                         ) : (
-                           <div className="w-full h-full flex items-center justify-center text-gray-600"><PlayCircle /></div>
-                         )}
-                         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
-                      </div>
-                      <div className="flex flex-col py-1">
-                          <h4 className="text-sm font-bold text-gray-200 line-clamp-2 group-hover:text-blue-400 transition-colors leading-tight">
-                            {item.title}
-                          </h4>
-                          <div className="mt-auto text-xs text-gray-500 flex items-center gap-2">
-                            <span className="bg-gray-800 px-1.5 py-0.5 rounded text-[10px]">{item.type}</span>
-                            <span>{item.views} 播放</span>
-                          </div>
-                      </div>
-                  </Link>
-                )) : (
-                  <div className="text-gray-500 text-sm py-4 text-center">暂无相关推荐</div>
+              <div className="flex flex-wrap items-center gap-3">
+                {metadata.year && (
+                  <span className="flex items-center gap-1.5 bg-blue-500/10 px-3 py-1 rounded-full text-blue-400 border border-blue-500/20 text-xs">
+                    <Calendar size={14} /> {metadata.year}
+                  </span>
                 )}
+                {metadata.status && (
+                  <span className="flex items-center gap-1.5 bg-green-500/10 px-3 py-1 rounded-full text-green-400 border border-green-500/20 text-xs">
+                    <Info size={14} /> {metadata.status}
+                  </span>
+                )}
+                {metadata.tags?.map((tag: string, i: number) => (
+                  <span key={i} className="flex items-center gap-1.5 bg-gray-800 px-3 py-1 rounded-full text-gray-300 border border-white/10 text-xs">
+                    <Tag size={14} /> {tag}
+                  </span>
+                ))}
+              </div>
+
+              {/* 操作栏 */}
+              <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
+                <div className="flex items-center gap-4 text-sm text-gray-400">
+                  <span className="flex items-center gap-1 text-yellow-500">
+                    <Star size={16} fill="currentColor" /> {Number(video.rating || 0).toFixed(1)}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <PlayCircle size={16} /> {video.views} 次播放
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <button onClick={handleLike} disabled={likeLoading} className={`flex items-center gap-2 px-4 py-2 rounded-full font-medium transition-all border ${isLiked ? 'bg-blue-600/20 text-blue-400 border-blue-500/50' : 'bg-[#161b22] text-gray-300 border-white/10 hover:bg-[#1f262e]'}`}>
+                    <ThumbsUp size={18} fill={isLiked ? "currentColor" : "none"} />
+                    <span>{likesCount}</span>
+                  </button>
+
+                  <button onClick={handleToggleFavorite} className={`flex items-center gap-2 px-4 py-2 rounded-full font-medium transition-all border ${isFavorited ? 'bg-pink-600/20 text-pink-400 border-pink-500/50' : 'bg-[#161b22] text-gray-300 border-white/10 hover:bg-[#1f262e]'}`}>
+                    <Heart size={18} fill={isFavorited ? "currentColor" : "none"} />
+                    <span>{isFavorited ? '已收藏' : '收藏'}</span>
+                  </button>
+
+                  <button className="p-2 bg-[#161b22] hover:bg-[#1f262e] text-gray-300 rounded-full border border-white/10">
+                    <Share2 size={18} />
+                  </button>
+                </div>
               </div>
             </div>
 
-         </div>
+            {/* 3. 选集线路 */}
+            {playlists.length > 0 && (
+              <div className="bg-[#161b22] border border-white/5 rounded-xl p-6">
+                <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                  <Server size={18} className="text-blue-400"/> 播放线路
+                </h3>
+                <div className="flex flex-wrap gap-2 mb-4 border-b border-white/5 pb-4">
+                  {playlists.map((pl: any, idx: number) => (
+                    <button
+                      key={idx}
+                      onClick={() => setActiveSourceIndex(idx)}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                        activeSourceIndex === idx ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                      }`}
+                    >
+                      {pl.sourceName}
+                    </button>
+                  ))}
+                </div>
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2 max-h-[300px] overflow-y-auto custom-scrollbar">
+                  {playlists[activeSourceIndex]?.episodes.map((ep: any, idx: number) => (
+                    <button
+                      key={idx}
+                      onClick={() => handlePlay(ep.url)}
+                      className={`px-2 py-2 border rounded text-xs transition-all truncate ${
+                        playingVideo?.url === ep.url 
+                        ? 'border-blue-500 bg-blue-600/20 text-blue-400' 
+                        : 'border-white/5 bg-[#0d1117] text-gray-300 hover:bg-blue-600/10'
+                      }`}
+                    >
+                      {ep.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 4. 剧情简介 */}
+            <div className="bg-[#161b22] rounded-xl p-6 border border-white/5">
+              <h3 className="text-white font-bold mb-2 flex items-center gap-2">
+                <MessageSquare size={18} className="text-blue-500"/> 剧情简介
+              </h3>
+              <p className="text-gray-400 leading-relaxed text-sm whitespace-pre-wrap">
+                {metadata.description || video.description || '暂无简介...'}
+              </p>
+            </div>
+
+            <CommentSection targetId={videoId} targetType="MOVIE" />
+          </div>
+
+          {/* 右侧：相关推荐 */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-bold text-white mb-4 pl-1 border-l-4 border-blue-500 leading-none">猜你喜欢</h3>
+            <div className="flex flex-col gap-4">
+              {relatedVideos.map((item) => (
+                <Link key={item.id} href={`/movies/${item.id}`} className="flex gap-3 group">
+                  <div className="w-32 aspect-video bg-gray-800 rounded-lg overflow-hidden relative shrink-0 border border-white/5">
+                    {item.coverUrl ? (
+                      <img src={item.coverUrl} alt={item.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-gray-600"><PlayCircle /></div>
+                    )}
+                  </div>
+                  <div className="flex flex-col justify-center">
+                    <h4 className="text-sm font-bold text-gray-200 line-clamp-2 group-hover:text-blue-400 transition-colors">
+                      {item.title}
+                    </h4>
+                    <p className="text-[10px] text-gray-500 mt-1">{item.views} 播放</p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+
+        </div>
       </div>
     </div>
   );
