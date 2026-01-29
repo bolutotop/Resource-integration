@@ -2,16 +2,15 @@
 
 import { PrismaClient } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
-
 import { getSession } from './user-auth';
 
 const prisma = new PrismaClient();
 
-// 1. 定义接口 (新增 coverUrl)
+// 1. 定义接口
 interface VideoFormData {
   title: string;
   videoUrl: string;
-  coverUrl: string; // --- 核心修复：加上这个字段 ---
+  coverUrl: string;
   description: string;
   rating: string;
   categories: string; 
@@ -29,13 +28,10 @@ export async function addVideo(formData: VideoFormData) {
       data: {
         title: formData.title,
         videoUrl: formData.videoUrl,
-        // --- 核心修复：写入封面链接 ---
         coverUrl: formData.coverUrl, 
-        
         description: formData.description,
         rating: parseFloat(formData.rating) || 0,
         type: formData.type,
-
         categories: {
           connectOrCreate: categoryList.map(name => ({
             where: { name },
@@ -56,7 +52,6 @@ export async function addVideo(formData: VideoFormData) {
     revalidatePath('/admin/videos');
     
     return { success: true, message: `"${newVideo.title}" 添加成功` };
-
   } catch (error) {
     console.error("添加视频失败:", error);
     return { success: false, message: "数据库写入失败" };
@@ -74,14 +69,10 @@ export async function updateVideo(id: number, formData: VideoFormData) {
       data: {
         title: formData.title,
         videoUrl: formData.videoUrl,
-        // --- 核心修复：更新封面链接 ---
         coverUrl: formData.coverUrl,
-
         description: formData.description,
         rating: parseFloat(formData.rating) || 0,
         type: formData.type,
-
-        // 重置并更新分类
         categories: {
           set: [], 
           connectOrCreate: categoryList.map(name => ({
@@ -89,7 +80,6 @@ export async function updateVideo(id: number, formData: VideoFormData) {
             create: { name },
           })),
         },
-        // 重置并更新标签
         tags: {
           set: [],
           connectOrCreate: tagList.map(name => ({
@@ -125,7 +115,7 @@ export async function deleteVideo(id: number) {
   }
 }
 
-// 5. 获取视频列表 (支持搜索)
+// 5. 获取视频列表
 export async function getVideos(category: string = '首页', searchTerm: string = '') {
   try {
     let whereClause: any = {};
@@ -156,19 +146,29 @@ export async function getVideos(category: string = '首页', searchTerm: string 
   }
 }
 
-// 6. 获取单个视频详情
+// --- 6. 获取单个视频详情 (按你的要求已更新) ---
 export async function getVideoById(id: number) {
   try {
     const video = await prisma.video.findUnique({
       where: { id },
       include: {
-        categories: true,
-        tags: true,
+        likes: true, // 关联点赞记录
+        tags: true,  // ✅ 包含标签数据
+        categories: true // 建议也包含这个，通常详情页也需要展示分类
       }
     });
+
+    if (video) {
+      // 浏览量自增
+      await prisma.video.update({
+        where: { id },
+        data: { views: { increment: 1 } }
+      });
+    }
+    
     return video;
   } catch (error) {
-    console.error("获取视频详情失败:", error);
+    console.error("获取详情失败:", error);
     return null;
   }
 }
@@ -189,8 +189,7 @@ export async function getRelatedVideos(currentId: number, type: string) {
   }
 }
 
-
-
+// 8. 点赞切换
 export async function toggleVideoLike(videoId: number) {
   const user = await getSession();
   if (!user) {
@@ -198,7 +197,6 @@ export async function toggleVideoLike(videoId: number) {
   }
 
   try {
-    // 检查是否已经点赞
     const existingLike = await prisma.like.findUnique({
       where: {
         userId_videoId: {
@@ -209,7 +207,6 @@ export async function toggleVideoLike(videoId: number) {
     });
 
     if (existingLike) {
-      // 已经赞过 -> 取消点赞
       await prisma.$transaction([
         prisma.like.delete({
           where: { id: existingLike.id },
@@ -221,7 +218,6 @@ export async function toggleVideoLike(videoId: number) {
       ]);
       return { success: true, liked: false };
     } else {
-      // 没赞过 -> 添加点赞
       await prisma.$transaction([
         prisma.like.create({
           data: {
@@ -242,11 +238,10 @@ export async function toggleVideoLike(videoId: number) {
   }
 }
 
-// 9. 获取当前视频的点赞信息 (是否已赞 + 总数)
+// 9. 获取点赞状态
 export async function getVideoLikeStatus(videoId: number) {
   const user = await getSession();
   
-  // 查总数 (也可以直接从 Video 表查 likesCount，但这里为了演示也可以分开)
   const video = await prisma.video.findUnique({
     where: { id: videoId },
     select: { likesCount: true }

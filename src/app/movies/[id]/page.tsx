@@ -3,7 +3,6 @@
 import React, { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
-  ArrowLeft, 
   Star, 
   ThumbsUp, 
   Loader2, 
@@ -45,10 +44,11 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
 
   // --- 基础状态 ---
   const [video, setVideo] = useState<any>(null);
+  
   const [relatedVideos, setRelatedVideos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // --- 爬虫数据状态 (播放列表 + 元数据) ---
+  // --- 爬虫数据状态 (播放列表) ---
   const [detailData, setDetailData] = useState<any>(null);
   const [activeSourceIndex, setActiveSourceIndex] = useState(0);
   
@@ -165,7 +165,7 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
   if (!video) return <div className="min-h-screen bg-[#0d1117] text-gray-400 flex items-center justify-center">视频未找到</div>;
 
   const playlists = detailData?.playlists || [];
-  const metadata = detailData?.metadata || {};
+  const dbTags = video.tags || [];
 
   return (
     <div className="min-h-screen bg-[#0d1117] text-gray-200 font-sans">
@@ -186,7 +186,6 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
                 </div>
               ) : playingVideo ? (
                 playingVideo.type === 'iframe' ? (
-                  /* 1. Iframe 模式 */
                   <iframe 
                     src={playingVideo.url} 
                     className="w-full h-full" 
@@ -196,15 +195,12 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
                     referrerPolicy="no-referrer"
                   />
                 ) : (
-                  /* 2. 原生 Video 模式 */
                   <video 
                     src={playingVideo.url} 
                     controls 
                     autoPlay 
                     className="w-full h-full" 
-                    // --- 新增：关键属性 ---
                     referrerPolicy="no-referrer" 
-                    // 允许跨域
                     crossOrigin="anonymous" 
                   />
                 )
@@ -216,24 +212,29 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
               )}
             </div>
 
-            {/* 2. 标题与动态元数据 */}
+            {/* 2. 视频信息 (已按要求修改) */}
             <div className="space-y-4">
-              <h1 className="text-2xl md:text-3xl font-bold text-white">{video.title}</h1>
+              <h1 className="text-2xl md:text-3xl font-bold text-white mb-3">{video.title}</h1>
               
-              <div className="flex flex-wrap items-center gap-3">
-                {metadata.year && (
-                  <span className="flex items-center gap-1.5 bg-blue-500/10 px-3 py-1 rounded-full text-blue-400 border border-blue-500/20 text-xs">
-                    <Calendar size={14} /> {metadata.year}
+              <div className="flex flex-wrap items-center gap-3 text-xs md:text-sm mb-4">
+                {/* 年份 */}
+                {video.year && (
+                  <span className="flex items-center gap-1.5 bg-white/5 px-3 py-1.5 rounded-lg text-blue-400 border border-white/5">
+                    <Calendar size={14} /> {video.year}
                   </span>
                 )}
-                {metadata.status && (
-                  <span className="flex items-center gap-1.5 bg-green-500/10 px-3 py-1 rounded-full text-green-400 border border-green-500/20 text-xs">
-                    <Info size={14} /> {metadata.status}
+                
+                {/* 状态 */}
+                {video.status && (
+                  <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/5 bg-green-500/10 text-green-400">
+                    <Info size={14} /> {video.status}
                   </span>
                 )}
-                {metadata.tags?.map((tag: string, i: number) => (
-                  <span key={i} className="flex items-center gap-1.5 bg-gray-800 px-3 py-1 rounded-full text-gray-300 border border-white/10 text-xs">
-                    <Tag size={14} /> {tag}
+
+                {/* 数据库标签遍历 */}
+                {dbTags.map((tag: any) => (
+                  <span key={tag.id} className="flex items-center gap-1 bg-white/5 px-3 py-1.5 rounded-lg text-gray-400 border border-white/5">
+                    <Tag size={12} /> {tag.name}
                   </span>
                 ))}
               </div>
@@ -310,7 +311,7 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
                 <MessageSquare size={18} className="text-blue-500"/> 剧情简介
               </h3>
               <p className="text-gray-400 leading-relaxed text-sm whitespace-pre-wrap">
-                {metadata.description || video.description || '暂无简介...'}
+                {video.description || '暂无简介...'}
               </p>
             </div>
 

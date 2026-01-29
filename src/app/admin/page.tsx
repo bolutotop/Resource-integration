@@ -3,22 +3,20 @@
 import { useRouter } from 'next/navigation';
 import { 
   LayoutDashboard, Video, Users, Settings, LogOut, 
-  TrendingUp, Activity, HardDrive, Plus 
+  TrendingUp, Activity, HardDrive, Plus,
+  Image as ImageIcon,
+  DownloadCloud // <--- 1. 新增图标引入
 } from 'lucide-react';
-import Link from 'next/link'; // 别忘了引入 Link
-
-import { Image as ImageIcon } from 'lucide-react'; // 别忘了导入 Icon
+import Link from 'next/link'; 
 
 export default function AdminDashboard() {
   const router = useRouter();
 
   const handleLogout = () => {
-    // 清除 Cookie
     document.cookie = 'kali_admin_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
     router.push('/login');
   };
 
-  // --- 修改点：在这里直接定义好 change (涨跌幅)，不要用 Math.random() ---
   const stats = [
     { label: '总视频数', value: '1,284', change: '+12.5%', icon: Video, color: 'text-blue-500', bg: 'bg-blue-500/10' },
     { label: '总播放量', value: '8.5M', change: '+8.2%', icon: TrendingUp, color: 'text-green-500', bg: 'bg-green-500/10' },
@@ -40,24 +38,37 @@ export default function AdminDashboard() {
           <button className="w-full flex items-center gap-3 px-4 py-3 bg-blue-600/10 text-blue-400 rounded-lg font-medium border border-blue-600/20">
             <LayoutDashboard size={18} /> 仪表盘
           </button>
-<Link 
-    href="/admin/videos" 
-    className="w-full flex items-center gap-3 px-4 py-3 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
-  >
-    <Video size={18} /> 视频管理
-  </Link>
+
+          {/* --- 2. 新增：采集管理入口 --- */}
+          <Link 
+            href="/admin/scraper" 
+            className="w-full flex items-center gap-3 px-4 py-3 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+          >
+            <DownloadCloud size={18} /> 采集任务
+          </Link>
+
+          <Link 
+            href="/admin/videos" 
+            className="w-full flex items-center gap-3 px-4 py-3 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+          >
+            <Video size={18} /> 视频管理
+          </Link>
+
           <button className="w-full flex items-center gap-3 px-4 py-3 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors">
             <Users size={18} /> 用户列表
           </button>
+          
           <button className="w-full flex items-center gap-3 px-4 py-3 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors">
             <HardDrive size={18} /> 资源监控
           </button>
+          
           <Link 
-  href="/admin/images" 
-  className="w-full flex items-center gap-3 px-4 py-3 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
->
-  <ImageIcon size={18} /> 媒体库
-</Link>
+            href="/admin/images" 
+            className="w-full flex items-center gap-3 px-4 py-3 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+          >
+            <ImageIcon size={18} /> 媒体库
+          </Link>
+          
           <button className="w-full flex items-center gap-3 px-4 py-3 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors">
             <Settings size={18} /> 系统设置
           </button>
@@ -80,7 +91,6 @@ export default function AdminDashboard() {
             <h1 className="text-2xl font-bold text-white">仪表盘</h1>
             <p className="text-sm text-gray-500 mt-1">欢迎回来，Administrator</p>
           </div>
-
         </header>
 
         {/* 统计卡片 Grid */}
@@ -91,7 +101,6 @@ export default function AdminDashboard() {
                 <div className={`${stat.bg} ${stat.color} p-3 rounded-lg`}>
                   <stat.icon size={20} />
                 </div>
-                {/* 修改点：这里直接使用 stat.change，不再动态生成 */}
                 <span className="text-xs text-green-400 font-mono">{stat.change}</span>
               </div>
               <div className="text-3xl font-bold text-white mb-1">{stat.value}</div>
@@ -102,6 +111,7 @@ export default function AdminDashboard() {
 
         {/* 占位内容区域 */}
         <div className="bg-[#161b22] border border-white/5 rounded-xl p-8 h-96 flex items-center justify-center text-gray-600 border-dashed">
+            
             这里将放置数据图表或最近的视频列表...
         </div>
       </main>

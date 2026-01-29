@@ -11,6 +11,10 @@ export interface ScrapedItem {
   status?: string;    // "连载", "完结", "v1.0"
   desc?: string;
   rating?: number;
+
+  year?: string;
+  studio?: string;
+  tags?: string[];
 }
 
 /**

@@ -6,9 +6,9 @@ export class AgeSource implements IScraperSource {
   name = "Age";
   private baseUrl = "https://www.agedm.io";
 
-  /**
-   * 抓取目录页
-   */
+  // ----------------------------------------------------------------
+  // 1. 抓取目录 (采用新代码：更稳健的文本切割解析)
+  // ----------------------------------------------------------------
   async scrapeCatalog(page: number): Promise<ScrapedItem[]> {
     const url = `${this.baseUrl}/catalog/all-all-all-all-all-time-${page}`;
     console.log(`[${this.name}] 正在抓取第 ${page} 页: ${url}`);
@@ -27,44 +27,83 @@ export class AgeSource implements IScraperSource {
 
       $('.cata_video_item').each((_, element) => {
         const $el = $(element);
-        const detailUrl = $el.find('h5.card-title a').attr('href') || "";
-        const idMatch = detailUrl.match(/\/detail\/(\d+)/);
-        const sourceId = idMatch ? idMatch[1] : "";
 
-        if (!sourceId) return;
+        // ID & 标题
+        const titleLink = $el.find('h5.card-title a');
+        const title = titleLink.text().trim();
+        const href = titleLink.attr('href') || "";
+        const idMatch = href.match(/\/detail\/(\d+)/);
+        if (!idMatch) return;
 
+        const sourceId = idMatch[1];
+        // 兼容 data-original 懒加载和 src
+        const coverUrl = $el.find('img.video_thumbs').attr('data-original') || $el.find('img.video_thumbs').attr('src') || "";
+
+        // 初始化字段
         let type = "动漫";
-        let status = "未知";
-        let desc = "";
+        let status = "连载";
+        let year = "";
+        let studio = "";
+        let tags: string[] = [];
+        let description = "";
 
+        // --- 核心逻辑：使用文本切割法解析详情 ---
         $el.find('.video_detail_info').each((_, info) => {
-          const text = $(info).text();
-          if (text.includes("动画种类：")) type = text.replace("动画种类：", "").trim();
-          if (text.includes("播放状态：")) status = text.replace("播放状态：", "").trim();
-          if ($(info).hasClass('desc')) desc = $(info).find('span').remove().end().text().trim();
+          const rawText = $(info).text().trim(); // 例如 "首播时间：2026-01-03"
+
+          // 提取冒号后的内容 (兼容中文冒号和英文冒号)
+          let value = "";
+          if (rawText.includes("：")) {
+            value = rawText.split("：")[1];
+          } else if (rawText.includes(":")) {
+            value = rawText.split(":")[1];
+          }
+
+          if (!value) return; 
+          value = value.trim();
+
+          // 关键词匹配
+          if (rawText.includes("动画种类")) type = value;
+          if (rawText.includes("播放状态")) status = value;
+          if (rawText.includes("制作公司")) studio = value;
+          if (rawText.includes("首播时间")) year = value.split('-')[0]; // 只取年份
+          if (rawText.includes("剧情类型")) tags = value.split(/\s+/).filter(t => t); // 按空格切分标签
+
+          // 简介特殊处理 (它有一个 .desc 类)
+          if ($(info).hasClass('desc')) {
+            description = value;
+          }
         });
+
+        // 封面上的状态优先级更高 (例如 "第05集")
+        const coverStatus = $el.find('.video_play_status').text().trim();
+        if (coverStatus) status = coverStatus;
 
         list.push({
           sourceId,
-          title: $el.find('h5.card-title a').text().trim(),
-          coverUrl: $el.find('img.video_thumbs').attr('data-original') || "",
+          title,
+          coverUrl,
           type,
           status,
-          desc,
+          desc: description,
+          year,
+          studio,
+          tags,
           rating: 0
         });
       });
 
+      console.log(`[${this.name}] 解析完成，本页 ${list.length} 条`);
       return list;
     } catch (error: any) {
-      console.error(`[${this.name}] 第 ${page} 页失败: ${error.message}`);
+      console.error(`[${this.name}] 目录抓取失败: ${error.message}`);
       return [];
     }
   }
 
-  /**
-   * 解析详情页 (抓取播放列表 + 元数据)
-   */
+  // ----------------------------------------------------------------
+  // 2. 解析详情页 (保留旧代码逻辑：因为新代码此处返回空Metadata，旧代码更完整)
+  // ----------------------------------------------------------------
   async scrapeDetail(sourceId: string): Promise<ScraperFullDetail> {
     const url = `${this.baseUrl}/detail/${sourceId}`;
     console.log(`[${this.name}] 正在抓取详情: ${url}`);
@@ -101,7 +140,7 @@ export class AgeSource implements IScraperSource {
         if (episodes.length > 0) playlists.push({ sourceName, episodes });
       });
 
-      // 2. 解析元数据
+      // 2. 解析元数据 (保留此部分以确保详情页信息的完整性)
       let year = "未知";
       let status = "未知";
       let tags: string[] = [];
@@ -130,9 +169,9 @@ export class AgeSource implements IScraperSource {
     }
   }
 
-  /**
-   * 解析视频流地址
-   */
+  // ----------------------------------------------------------------
+  // 3. 解析视频流地址 (保留旧代码：重要的 Vurl 提取和直链判断)
+  // ----------------------------------------------------------------
   async scrapeVideo(playUrl: string): Promise<ScraperVideoSource | null> {
     const targetUrl = playUrl.startsWith('http') ? playUrl : `${this.baseUrl}${playUrl}`;
     console.log(`[${this.name}] 正在解析视频: ${targetUrl}`);
@@ -149,7 +188,7 @@ export class AgeSource implements IScraperSource {
       let videoUrl = '';
       let type: 'native' | 'iframe' = 'iframe';
 
-      // 尝试匹配页面中的 Vurl 变量
+      // 尝试匹配页面中的 Vurl 变量 (Age 核心逻辑)
       const vurlMatch = html.match(/var\s+Vurl\s*=\s*['"](.*?)['"]/);
       if (vurlMatch && vurlMatch[1]) {
         videoUrl = decodeURIComponent(vurlMatch[1]);
@@ -176,6 +215,7 @@ export class AgeSource implements IScraperSource {
           type = 'native';
         } else {
           try {
+            // 尝试提取嵌套的 url 参数
             const urlObj = new URL(videoUrl);
             const subUrl = urlObj.searchParams.get('url') || urlObj.searchParams.get('v');
             if (subUrl && (subUrl.includes('.m3u8') || subUrl.includes('.mp4'))) {

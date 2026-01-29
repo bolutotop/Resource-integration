@@ -24,6 +24,9 @@ model Video {
   sourceId    String?  @unique // 外部资源唯一 ID，用于防重
   status      String?          // 连载、完结、预告等
   
+year        String?  // 新增：年份 (如 "2026")
+  studio      String?  // 新增：制作公司 (如 "J.C.STAFF")
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
