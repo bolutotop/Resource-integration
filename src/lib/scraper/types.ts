@@ -39,7 +39,7 @@ export interface ScraperPlaylist {
  */
 export interface ScraperFullDetail {
   playlists: ScraperPlaylist[]; 
-  metadata: {                   
+  metadata: {                    
     year: string;
     tags: string[];
     status: string;
@@ -51,8 +51,8 @@ export interface ScraperFullDetail {
  * 5. 视频播放源定义
  */
 export interface ScraperVideoSource {
-  url: string;                      // 真实的播放地址 (mp4, m3u8, or iframe src)
-  type: 'native' | 'iframe';        // native=直接播放, iframe=嵌入网页
+  url: string;                    // 真实的播放地址 (mp4, m3u8, or iframe src)
+  type: 'native' | 'iframe';      // native=直接播放, iframe=嵌入网页
   headers?: Record<string, string>; // 特定请求头
 }
 
@@ -72,4 +72,10 @@ export interface IScraperSource {
 
   /** 解析具体的播放地址 */
   scrapeVideo(playUrl: string): Promise<ScraperVideoSource | null>;
+
+  /**
+   * 新增：抓取首页数据 (可选)
+   * 返回 recommended (推荐) 和 recent (最近更新) 两个数组
+   */
+  scrapeHome?(): Promise<{ recommended: ScrapedItem[]; recent: ScrapedItem[] }>;
 }

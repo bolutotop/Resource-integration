@@ -12,29 +12,33 @@ datasource db {
 model Video {
   id          Int      @id @default(autoincrement())
   title       String
-  // 注意：SQLite 中 String 默认就是 Text，不支持 @db.Text，直接使用 String 即可
-  description String? 
-  videoUrl    String   @default("") 
+  // 注意：SQLite 中 String 默认就是 Text
+  description String?
+  videoUrl    String   @default("")
   coverUrl    String?
   type        String   @default("电影")
   rating      Float    @default(0.0)
   views       Int      @default(0)
-  
+
   // --- 新增 & 优化字段 ---
   sourceId    String?  @unique // 外部资源唯一 ID，用于防重
   status      String?          // 连载、完结、预告等
   
-year        String?  // 新增：年份 (如 "2026")
-  studio      String?  // 新增：制作公司 (如 "J.C.STAFF")
+  year        String?  // 年份 (如 "2026")
+  studio      String?  // 制作公司 (如 "J.C.STAFF")
+
+  // --- 首页标记字段 (本次新增) ---
+  isRecommended Boolean  @default(false) // 是否为“今日推荐”
+  isRecent      Boolean  @default(false) // 是否为“最近更新” (用于人工置顶等场景)
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   // 关联关系
-  categories  Category[] 
-  tags        Tag[]      
-  likesCount  Int      @default(0) 
-  likes       Like[]   
+  categories  Category[]
+  tags        Tag[]
+  likesCount  Int      @default(0)
+  likes       Like[]
 }
 
 model Category {
@@ -55,15 +59,15 @@ model User {
   id        Int      @id @default(autoincrement())
   name      String?
   email     String   @unique
-  password  String   
+  password  String
   avatar    String?
-  role      String   @default("USER") 
+  role      String   @default("USER")
   createdAt DateTime @default(now())
 
-  likes     Like[]   
-  history   History[] 
-  favorites Favorite[] 
-  comments  Comment[]  
+  likes     Like[]
+  history   History[]
+  favorites Favorite[]
+  comments  Comment[]
 }
 
 model Like {
@@ -81,11 +85,11 @@ model Like {
 model History {
   id         Int      @id @default(autoincrement())
   userId     Int
-  targetId   Int      
-  targetType String   
+  targetId   Int
+  targetType String
   title      String
   coverUrl   String?
-  routeUrl   String   
+  routeUrl   String
   visitedAt  DateTime @default(now())
 
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -98,11 +102,11 @@ model Favorite {
   id         Int      @id @default(autoincrement())
   userId     Int
   targetId   Int
-  targetType String   
+  targetType String
   title      String
   coverUrl   String?
   routeUrl   String
-  createdAt  DateTime @default(now()) 
+  createdAt  DateTime @default(now())
 
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -112,26 +116,26 @@ model Favorite {
 
 model Comment {
   id         Int      @id @default(autoincrement())
-  content    String   
+  content    String
   userId     Int
   targetId   Int
-  targetType String   
-  parentId   Int?     
-  
+  targetType String
+  parentId   Int?
+
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+
   parent     Comment?  @relation("ReplyTo", fields: [parentId], references: [id], onDelete: Cascade)
   children   Comment[] @relation("ReplyTo")
 
-  @@index([targetId, targetType]) 
+  @@index([targetId, targetType])
 }
 
 model Image {
   id        Int      @id @default(autoincrement())
-  filename  String   
-  url       String   @unique 
+  filename  String
+  url       String   @unique
   createdAt DateTime @default(now())
 }

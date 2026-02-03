@@ -115,46 +115,81 @@ export async function deleteVideo(id: number) {
   }
 }
 
-// 5. 获取视频列表
-export async function getVideos(category: string = '首页', searchTerm: string = '') {
+// 5. 获取视频列表 (已根据要求修改)
+export async function getVideos(params: {
+  category?: string; 
+  search?: string;
+  year?: string;     
+  status?: string;   
+  isRecommended?: boolean; 
+  isRecent?: boolean;      
+  page?: number;     // 当前页码
+  pageSize?: number; // 每页数量 (新增参数，允许前端控制)
+}) {
   try {
-    let whereClause: any = {};
+    const { 
+      category, search, year, status, 
+      isRecommended, isRecent, 
+      page = 1, 
+      pageSize = 24 // 默认每页 24 个
+    } = params;
 
-    if (searchTerm) {
-      whereClause = {
-        OR: [
-          { title: { contains: searchTerm } }, 
-          { description: { contains: searchTerm } }, 
-          { tags: { some: { name: { contains: searchTerm } } } } 
-        ]
-      };
-    } else if (category !== '首页') {
-      whereClause = { type: category };
+    const where: any = {};
+
+    // --- 筛选条件构建 ---
+    if (category && category !== '全部') where.type = category;
+    if (year && year !== '全部') where.year = year;
+    if (status && status !== '全部') where.status = { contains: status };
+    if (isRecommended) where.isRecommended = true;
+    if (isRecent) where.isRecent = true;
+    if (search) {
+      where.OR = [
+        { title: { contains: search } },
+        { description: { contains: search } }
+      ];
     }
 
-    return await prisma.video.findMany({
-      where: whereClause,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        categories: true, 
-        tags: true
-      }
+    // --- 1. 查询总数 ---
+    const totalCount = await prisma.video.count({ where });
+
+    // --- 2. 查询当前页数据 ---
+    const videos = await prisma.video.findMany({
+      where,
+      orderBy: { updatedAt: 'desc' },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      // include: { likes: true } // 不需要不需要 include，列表页尽量轻量
     });
+    
+    // --- 3. 返回结构化数据 ---
+    return {
+      data: videos,
+      pagination: {
+        total: totalCount,
+        page: page,
+        pageSize: pageSize,
+        totalPages: Math.ceil(totalCount / pageSize)
+      }
+    };
+
   } catch (error) {
-    console.error("获取视频列表失败:", error);
-    return [];
+    console.error("查询失败:", error);
+    return { 
+      data: [], 
+      pagination: { total: 0, page: 1, pageSize: 24, totalPages: 0 } 
+    };
   }
 }
 
-// --- 6. 获取单个视频详情 (按你的要求已更新) ---
+// 6. 获取单个视频详情
 export async function getVideoById(id: number) {
   try {
     const video = await prisma.video.findUnique({
       where: { id },
       include: {
         likes: true, // 关联点赞记录
-        tags: true,  // ✅ 包含标签数据
-        categories: true // 建议也包含这个，通常详情页也需要展示分类
+        tags: true,  // 包含标签数据
+        categories: true // 包含分类
       }
     });
 
@@ -182,7 +217,11 @@ export async function getRelatedVideos(currentId: number, type: string) {
         id: { not: currentId } 
       },
       take: 4,
-      orderBy: { views: 'desc' } 
+      orderBy: { views: 'desc' },
+      include: {
+        categories: true,
+        tags: true
+      }
     });
   } catch (error) {
     return [];
