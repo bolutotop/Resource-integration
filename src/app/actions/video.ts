@@ -115,26 +115,36 @@ export async function deleteVideo(id: number) {
   }
 }
 
-// 5. 获取视频列表 (已根据要求修改)
+// src/app/actions/video.ts
+
 export async function getVideos(params: {
+  source?: string;     // <--- [新增] 数据源参数
   category?: string; 
   search?: string;
-  year?: string;     
-  status?: string;   
+  year?: string;      
+  status?: string;    
   isRecommended?: boolean; 
-  isRecent?: boolean;      
-  page?: number;     // 当前页码
-  pageSize?: number; // 每页数量 (新增参数，允许前端控制)
+  isRecent?: boolean;       
+  page?: number;      
+  pageSize?: number; 
 }) {
   try {
     const { 
-      category, search, year, status, 
-      isRecommended, isRecent, 
+      source = 'Age',  // <--- [新增] 默认值为 'Age'
+      category, 
+      search, 
+      year, 
+      status, 
+      isRecommended, 
+      isRecent, 
       page = 1, 
-      pageSize = 24 // 默认每页 24 个
+      pageSize = 24 
     } = params;
 
-    const where: any = {};
+    // --- 核心修改：初始化 where 时加入 sourceSite 过滤 ---
+    const where: any = {
+      sourceSite: source 
+    };
 
     // --- 筛选条件构建 ---
     if (category && category !== '全部') where.type = category;
@@ -142,6 +152,8 @@ export async function getVideos(params: {
     if (status && status !== '全部') where.status = { contains: status };
     if (isRecommended) where.isRecommended = true;
     if (isRecent) where.isRecent = true;
+    
+    // 搜索逻辑
     if (search) {
       where.OR = [
         { title: { contains: search } },
@@ -158,9 +170,9 @@ export async function getVideos(params: {
       orderBy: { updatedAt: 'desc' },
       skip: (page - 1) * pageSize,
       take: pageSize,
-      // include: { likes: true } // 不需要不需要 include，列表页尽量轻量
+      // include: { likes: true } 
     });
-    
+     
     // --- 3. 返回结构化数据 ---
     return {
       data: videos,
@@ -304,4 +316,39 @@ export async function getVideoLikeStatus(videoId: number) {
     likesCount: video?.likesCount || 0, 
     isLiked 
   };
+}
+
+
+export async function getHomeGroupedData(source: string) {
+  try {
+    // 1. 查出所有 isRecent=true 或 isRecommended=true 的视频
+    const videos = await prisma.video.findMany({
+      where: {
+        sourceSite: source,
+        OR: [
+          { isRecommended: true },
+          { isRecent: true }
+        ]
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 500 // 限制数量，防止太多
+    });
+
+    // 2. 在内存中按 type 分组
+    const grouped: Record<string, any[]> = {};
+    
+    // 先处理推荐
+    grouped['正在热映'] = videos.filter(v => v.isRecommended);
+
+    // 再处理其他类型
+    videos.filter(v => !v.isRecommended).forEach(v => {
+      const typeKey = v.type || "其他"; // 如 "日韩动漫"
+      if (!grouped[typeKey]) grouped[typeKey] = [];
+      grouped[typeKey].push(v);
+    });
+
+    return grouped;
+  } catch (error) {
+    return {};
+  }
 }

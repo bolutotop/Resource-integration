@@ -3,24 +3,15 @@
 import React, { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
-  Star, 
-  ThumbsUp, 
-  Loader2, 
-  PlayCircle, 
-  Share2, 
-  MessageSquare,
-  Heart,
-  Server,
-  Play,
-  Calendar,
-  Tag,
-  Info
+  Star, ThumbsUp, Loader2, PlayCircle, Share2, 
+  MessageSquare, Heart, Server, Play, Calendar, Tag, Info 
 } from 'lucide-react';
 import Link from 'next/link';
 
 // 组件引入
 import Header from '@/components/Header';
 import CommentSection from '@/components/CommentSection';
+import UIPlayer from '@/components/UIPlayer'; // 1. 引入自定义播放器组件
 
 // Action 引入
 import { 
@@ -44,14 +35,13 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
 
   // --- 基础状态 ---
   const [video, setVideo] = useState<any>(null);
-  
   const [relatedVideos, setRelatedVideos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // --- 爬虫数据状态 (播放列表) ---
+  // --- 爬虫数据状态 ---
   const [detailData, setDetailData] = useState<any>(null);
   const [activeSourceIndex, setActiveSourceIndex] = useState(0);
-  
+   
   // --- 播放器状态 ---
   const [playingVideo, setPlayingVideo] = useState<{ url: string, type: 'native' | 'iframe' } | null>(null);
   const [resolving, setResolving] = useState(false);
@@ -79,7 +69,7 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
     routeUrl: `/movies/${videoId}`
   });
 
-  // --- 初始化加载 ---
+  // --- 1. 初始化加载 ---
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -87,10 +77,13 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
         if (data) {
           setVideo(data);
           
+          const currentSource = data.sourceSite || 'Age';
+          console.log(`[Detail] 加载视频: ${data.title}, 源: ${currentSource}, ID: ${data.sourceId}`);
+
           const promises = [
             getRelatedVideos(videoId, data.type),
             getVideoLikeStatus(videoId),
-            data.sourceId ? getScraperDetailData(data.sourceId, 'Age') : null
+            data.sourceId ? getScraperDetailData(data.sourceId, currentSource) : null
           ];
 
           const [related, likeStatus, scraperRes] = await Promise.all(promises);
@@ -113,12 +106,14 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
     fetchData();
   }, [videoId]);
 
-  // --- 核心播放逻辑 ---
+  // --- 2. 核心播放逻辑 ---
   const handlePlay = async (playUrl: string) => {
     setResolving(true);
     setPlayingVideo(null); 
     try {
-      const res = await getScraperVideo(playUrl, 'Age');
+      const currentSource = video?.sourceSite || 'Age';
+      const res = await getScraperVideo(playUrl, currentSource);
+      
       if (res.success && res.data) {
         setPlayingVideo(res.data);
       } else {
@@ -178,14 +173,17 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
           <div className="lg:col-span-2 space-y-6">
             
             {/* 1. 播放器渲染 */}
-            <div className="aspect-video bg-black rounded-xl overflow-hidden shadow-2xl relative border border-white/5 flex items-center justify-center">
+            {/* ⚠️ 修改点：移除了 flex items-center justify-center，以便 UIPlayer 占满容器 */}
+            <div className="aspect-video bg-black rounded-xl overflow-hidden shadow-2xl relative border border-white/5">
               {resolving ? (
-                <div className="flex flex-col items-center gap-3 text-blue-400">
+                // 解析中状态：需要手动居中
+                <div className="flex flex-col items-center justify-center h-full gap-3 text-blue-400">
                   <Loader2 size={40} className="animate-spin" />
                   <span className="text-sm font-medium">正在解析视频地址...</span>
                 </div>
               ) : playingVideo ? (
                 playingVideo.type === 'iframe' ? (
+                  // Iframe 模式 (Age源等)
                   <iframe 
                     src={playingVideo.url} 
                     className="w-full h-full" 
@@ -195,26 +193,27 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
                     referrerPolicy="no-referrer"
                   />
                 ) : (
-                  <video 
-                    src={playingVideo.url} 
-                    controls 
-                    autoPlay 
-                    className="w-full h-full" 
-                    referrerPolicy="no-referrer" 
-                    crossOrigin="anonymous" 
-                  />
+                  // Native 模式 (Yhmc源等) - 使用自定义 UIPlayer
+                  // key 属性确保切换集数时组件完全重置
+                  <UIPlayer key={playingVideo.url} url={playingVideo.url} />
                 )
               ) : (
-                <div className="text-center text-gray-500 group">
+                // 未播放状态：需要手动居中
+                <div className="h-full flex flex-col items-center justify-center text-gray-500 group">
                   <Play size={48} className="mx-auto mb-2 opacity-20 group-hover:scale-110 transition-transform" />
                   <p>请在下方选择集数开始播放</p>
                 </div>
               )}
             </div>
 
-            {/* 2. 视频信息 (已按要求修改) */}
+            {/* 2. 视频信息 */}
             <div className="space-y-4">
-              <h1 className="text-2xl md:text-3xl font-bold text-white mb-3">{video.title}</h1>
+              <h1 className="text-2xl md:text-3xl font-bold text-white mb-3">
+                {video.title} 
+                <span className="ml-3 text-xs font-normal px-2 py-1 bg-white/10 rounded text-gray-400">
+                  {video.sourceSite || 'Age'}源
+                </span>
+              </h1>
               
               <div className="flex flex-wrap items-center gap-3 text-xs md:text-sm mb-4">
                 {/* 年份 */}
@@ -269,7 +268,7 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
             </div>
 
             {/* 3. 选集线路 */}
-            {playlists.length > 0 && (
+            {playlists.length > 0 ? (
               <div className="bg-[#161b22] border border-white/5 rounded-xl p-6">
                 <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
                   <Server size={18} className="text-blue-400"/> 播放线路
@@ -287,7 +286,8 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
                     </button>
                   ))}
                 </div>
-                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2 max-h-[300px] overflow-y-auto custom-scrollbar">
+                
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2 max-h-[400px] overflow-y-auto custom-scrollbar">
                   {playlists[activeSourceIndex]?.episodes.map((ep: any, idx: number) => (
                     <button
                       key={idx}
@@ -303,6 +303,10 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
                   ))}
                 </div>
               </div>
+            ) : (
+                <div className="bg-[#161b22] border border-white/5 rounded-xl p-6 text-center text-gray-500">
+                    正在获取播放列表或暂无资源...
+                </div>
             )}
 
             {/* 4. 剧情简介 */}
@@ -311,7 +315,7 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
                 <MessageSquare size={18} className="text-blue-500"/> 剧情简介
               </h3>
               <p className="text-gray-400 leading-relaxed text-sm whitespace-pre-wrap">
-                {video.description || '暂无简介...'}
+                {detailData?.metadata?.description || video.description || '暂无简介...'}
               </p>
             </div>
 
@@ -335,7 +339,7 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
                     <h4 className="text-sm font-bold text-gray-200 line-clamp-2 group-hover:text-blue-400 transition-colors">
                       {item.title}
                     </h4>
-                    <p className="text-[10px] text-gray-500 mt-1">{item.views} 播放</p>
+                    <p className="text-[10px] text-gray-500 mt-1">{item.year} · {item.type}</p>
                   </div>
                 </Link>
               ))}

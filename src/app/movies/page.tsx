@@ -1,167 +1,150 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Header from '@/components/Header';
 import Link from 'next/link';
-import { getVideos } from '@/app/actions/video';
-import { PlayCircle, Flame, Clock, Loader2, ChevronRight } from 'lucide-react';
+import { getVideos, getHomeGroupedData } from '@/app/actions/video'; // 引入新的 API
+import { Flame, Clock, ChevronRight, PlayCircle } from 'lucide-react';
+import { useSource } from '@/context/SourceContext';
+import SourceSelector from '@/components/SourceSelector';
 
-// --- 组件部分 ---
-
-// 1. 封面组件
-const VideoCover = ({ src, title, status }: { src?: string | null, title: string, status?: string }) => {
-  const [error, setError] = useState(false);
-
-  if (!src || error) {
-    return (
-      <div className="w-full h-full flex items-center justify-center bg-gray-800 text-gray-600">
-        <PlayCircle size={32} />
+// --- 通用视频卡片 ---
+const VideoCard = ({ video }: { video: any }) => (
+  <Link href={`/movies/${video.id}`} className="group block w-36 md:w-44 shrink-0">
+    <div className="aspect-[2/3] rounded-lg overflow-hidden relative border border-white/5 mb-2 bg-[#161b22]">
+      <img src={video.coverUrl} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
+      <div className="absolute top-1 right-1 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded backdrop-blur-sm">
+        {video.status}
       </div>
-    );
-  }
-
-  return (
-    <>
-      <img 
-        src={src} 
-        alt={title} 
-        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" 
-        onError={() => setError(true)} 
-      />
-      {/* 状态角标 */}
-      {status && (
-        <div className="absolute top-1 right-1 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded backdrop-blur-sm z-10">
-          {status}
-        </div>
-      )}
-    </>
-  );
-};
-
-// 2. 视频卡片组件
-const VideoCard = ({ video, className = "" }: { video: any, className?: string }) => (
-  <Link 
-    href={`/movies/${video.id}`} 
-    className={`group block shrink-0 ${className}`}
-  >
-    <div className="aspect-[2/3] rounded-lg overflow-hidden relative border border-white/5 mb-2 bg-gray-900 shadow-md">
-      <VideoCover src={video.coverUrl} title={video.title} status={video.status} />
-      
-      {/* 悬停时的遮罩层 */}
-      <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors pointer-events-none" />
-      
-      {/* 悬停播放按钮效果 */}
-      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-         <div className="bg-green-500/90 rounded-full p-2 text-white shadow-lg transform scale-50 group-hover:scale-100 transition-transform">
-            <PlayCircle size={20} fill="currentColor" />
-         </div>
+      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/30">
+        <PlayCircle className="text-white w-10 h-10 drop-shadow-lg" />
       </div>
     </div>
-
-    <h3 className="text-sm font-bold text-gray-200 truncate group-hover:text-blue-400 transition-colors">
-      {video.title}
-    </h3>
-    <p className="text-[10px] text-gray-500 mt-1 flex items-center justify-between">
-      <span>{video.year || '未知年份'}</span>
-      <span className="bg-gray-800 px-1 rounded text-gray-400">{video.type}</span>
-    </p>
+    <h3 className="text-xs md:text-sm font-bold text-gray-200 truncate group-hover:text-blue-400">{video.title}</h3>
+    <p className="text-[10px] text-gray-500 truncate">{video.type}</p>
   </Link>
 );
 
-// --- 主页面 ---
+// --- 横向滚动板块 ---
+const SectionRow = ({ title, videos, icon: Icon, colorClass }: any) => {
+  if (!videos || videos.length === 0) return null;
+  return (
+    <section className="mb-8">
+      <div className="flex items-center justify-between mb-4 px-1">
+        <div className="flex items-center gap-2 text-white">
+          {Icon && <Icon className={colorClass} size={20} />}
+          <h2 className="text-lg md:text-xl font-bold">{title}</h2>
+        </div>
+        <Link href="/catalog" className="text-xs text-gray-500 hover:text-white flex items-center">
+          更多 <ChevronRight size={14} />
+        </Link>
+      </div>
+      <div className="flex gap-3 md:gap-4 overflow-x-auto pb-4 custom-scrollbar">
+        {videos.map((v: any) => <VideoCard key={v.id} video={v} />)}
+      </div>
+    </section>
+  );
+};
 
 export default function HomePage() {
-  const [recommends, setRecommends] = useState<any[]>([]);
-  const [recents, setRecents] = useState<any[]>([]);
+  const { currentSource } = useSource();
   const [loading, setLoading] = useState(true);
 
+  // Age 模式数据
+  const [ageRecommends, setAgeRecommends] = useState([]);
+  const [ageRecents, setAgeRecents] = useState([]);
+
+  // Yhmc 模式数据 (动态数组)
+  const [yhmcSections, setYhmcSections] = useState<any[]>([]);
+
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        // --- 修改开始: 按照你的要求更新了参数和数据读取逻辑 ---
-        
-        // 使用 Promise.all 并行请求
-        const [recRes, recentRes] = await Promise.all([
-          getVideos({ isRecommended: true, pageSize: 12 } as any), // 首页只需少量推荐
-          getVideos({ isRecent: true, pageSize: 18 } as any)       // 首页显示最近更新
-        ]);
-        
-        // ⚠️ 修改点：访问 .data 属性 (这里加了 || [] 防止接口返回 null 导致报错)
-        setRecommends(recRes.data || []);
-        setRecents(recentRes.data || []);
+    setLoading(true);
 
-        // --- 修改结束 ---
-
-      } catch (error) {
-        console.error("Failed to fetch videos:", error);
-      } finally {
+    if (currentSource === 'Age') {
+      // Age 逻辑：保持手动分发的请求
+      Promise.all([
+        getVideos({ isRecommended: true, pageSize: 12, source: 'Age' }),
+        getVideos({ isRecent: true, pageSize: 18, source: 'Age' })
+      ]).then(([rec, recent]) => {
+        setAgeRecommends(rec.data as any);
+        setAgeRecents(recent.data as any);
         setLoading(false);
-      }
-    };
+      });
 
-    fetchData();
-  }, []);
+    } else if (currentSource === 'Yhmc') {
+      // Yhmc 逻辑：调用后端聚合后的分组数据
+      getHomeGroupedData('Yhmc').then((groupedData: any) => {
+        const sections = Object.entries(groupedData).map(([key, list]) => ({
+          title: key === '正在热映' ? key : `最新${key}`,
+          videos: list,
+          colorClass: key === '正在热映' ? 'text-red-500' : 'text-blue-400',
+          icon: key === '正在热映' ? Flame : Clock
+        }));
+
+        // 排序：正在热映置顶
+        sections.sort((a, b) => (a.title === '正在热映' ? -1 : 1));
+
+        setYhmcSections(sections);
+        setLoading(false);
+      });
+    }
+  }, [currentSource]);
 
   return (
-    <div className="min-h-screen bg-[#0d1117] text-gray-200 font-sans">
+    <div className="min-h-screen bg-[#0d1117] text-gray-200">
       <Header />
       
-      <main className="max-w-[1600px] mx-auto p-4 md:p-8 space-y-12">
-        
-        {/* Banner / 头部引导 */}
-        <div className="flex justify-between items-end border-b border-white/5 pb-4">
-           <div>
-             <h1 className="text-3xl font-bold text-white tracking-tight">发现动漫</h1>
-             <p className="text-gray-500 text-sm mt-1">探索最新、最热的动漫影视内容</p>
-           </div>
-           <Link href="/catalog" className="flex items-center text-sm text-blue-500 hover:text-blue-400 transition-colors group">
-             浏览全部片库 <ChevronRight size={16} className="ml-1 group-hover:translate-x-1 transition-transform" />
-           </Link>
+      <div className="max-w-[1600px] mx-auto p-4 md:p-8">
+        {/* 顶部标题栏 */}
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold text-white mb-4">
+              {currentSource === 'Age' ? 'Age 动漫' : '樱花动漫 (Yhmc)'}
+            </h1>
+            <SourceSelector />
+          </div>
+          <Link href="/catalog" className="text-sm text-blue-400 hover:text-blue-300 pb-2">
+            浏览全部片库 &rarr;
+          </Link>
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="animate-spin text-blue-500" size={32} />
-          </div>
+          <div className="h-64 flex items-center justify-center text-gray-500 italic">加载中...</div>
         ) : (
           <>
-            {/* 1. 今日推荐 (横向滚动) */}
-            {recommends.length > 0 && (
-              <section className="space-y-4">
-                <div className="flex items-center gap-2 text-white">
-                  <Flame className="text-red-500" fill="currentColor" /> 
-                  <h2 className="text-xl font-bold">今日推荐</h2>
-                </div>
-                
-                <div className="flex gap-4 overflow-x-auto pb-4 pt-2 px-1 -mx-1 scroll-smooth">
-                  {recommends.map((v: any) => (
-                    <VideoCard key={v.id} video={v} className="w-36 md:w-44 lg:w-48" />
-                  ))}
-                </div>
-              </section>
+            {/* Age 布局 */}
+            {currentSource === 'Age' && (
+              <>
+                <SectionRow title="今日推荐" videos={ageRecommends} icon={Flame} colorClass="text-red-500" />
+                <section>
+                  <div className="flex items-center gap-2 mb-4 text-white">
+                    <Clock className="text-green-500" size={20} /> 
+                    <h2 className="text-xl font-bold">最近更新</h2>
+                  </div>
+                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4">
+                    {ageRecents.map((v: any) => <VideoCard key={v.id} video={v} />)}
+                  </div>
+                </section>
+              </>
             )}
 
-            {/* 2. 最近更新 (网格布局) */}
-            <section className="space-y-4">
-              <div className="flex items-center gap-2 text-white">
-                <Clock className="text-green-500" /> 
-                <h2 className="text-xl font-bold">最近更新</h2>
+            {/* Yhmc 布局：动态渲染所有板块 */}
+            {currentSource === 'Yhmc' && (
+              <div className="space-y-2">
+                {yhmcSections.map((section) => (
+                  <SectionRow 
+                    key={section.title}
+                    title={section.title} 
+                    videos={section.videos} 
+                    icon={section.icon} 
+                    colorClass={section.colorClass} 
+                  />
+                ))}
               </div>
-              
-              {recents.length === 0 ? (
-                <div className="text-gray-500 text-sm">暂无更新数据</div>
-              ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-4 gap-y-8">
-                  {recents.map((v: any) => (
-                    <VideoCard key={v.id} video={v} className="w-full" />
-                  ))}
-                </div>
-              )}
-            </section>
+            )}
           </>
         )}
-      </main>
+      </div>
     </div>
   );
 }

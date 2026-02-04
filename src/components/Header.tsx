@@ -1,26 +1,29 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Search, Bell, Clock, X, User } from 'lucide-react';
+import { Search, Bell, Clock, X, User, Layers } from 'lucide-react'; // 1. 新增 Layers 图标
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation'; // 1. 新增：引入路由钩子
+import { useRouter, useSearchParams } from 'next/navigation';
 import { getSession, logoutUser } from '@/app/actions/user-auth';
 import AuthForm from './AuthForm';
 import UserDropdown from './UserDropdown';
 
-// --- 引入 Context Hook (保持不变) ---
+// --- Context Hooks ---
 import { useAuthModal } from '@/context/AuthModalContext';
+import { useSource } from '@/context/SourceContext'; // 2. 新增 SourceContext
 
 export default function Header() {
   const router = useRouter();
   const searchParams = useSearchParams();
   
-  // --- 2. 新增：搜索框内部状态 ---
-  // 这样就不需要父组件传 props 也能打字了
+  // --- 3. 新增：获取源状态 ---
+  const { currentSource, switchSource } = useSource();
+
+  // --- 搜索框状态 ---
   const initialSearch = searchParams.get('search') || '';
   const [keyword, setKeyword] = useState(initialSearch);
 
-  // --- Auth 状态 (保持你原有的逻辑) ---
+  // --- Auth 状态 ---
   const [currentUser, setCurrentUser] = useState<{id: number, name: string, email: string} | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const { isLoginOpen, openLoginModal, closeLoginModal } = useAuthModal();
@@ -35,18 +38,16 @@ export default function Header() {
     checkAuth();
   }, []);
 
-  // --- 3. 新增：处理搜索提交 ---
+  // --- 处理搜索提交 ---
   const handleSearch = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && keyword.trim()) {
-      // 跳转到 /catalog 并带上参数
       router.push(`/catalog?search=${encodeURIComponent(keyword)}`);
     }
   };
 
-  // 清空搜索
   const clearSearch = () => {
     setKeyword('');
-    router.push('/catalog'); // 可选：清空时是否跳转回全部列表，看你需求
+    router.push('/catalog');
   };
 
   const handleLogout = async () => {
@@ -58,7 +59,6 @@ export default function Header() {
     }
   };
 
-  // 处理弹窗关闭 (保持不变)
   const handleCloseModal = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).id === 'modal-overlay') {
       closeLoginModal();
@@ -69,24 +69,49 @@ export default function Header() {
     <>
       <header className="h-16 sticky top-0 z-40 bg-[#0d1117]/80 backdrop-blur-xl border-b border-white/5 flex items-center justify-between px-6 lg:px-8 shrink-0">
         
-        {/* Logo (保持不变) */}
-        <Link href="/" className="flex items-center gap-2 mr-8">
+        {/* Logo */}
+        <Link href="/" className="flex items-center gap-2 mr-4 lg:mr-8 shrink-0">
            <div className="w-8 h-8 bg-gradient-to-tr from-green-400 to-blue-500 rounded-lg flex items-center justify-center font-bold text-white">K</div>
            <span className="text-xl font-bold tracking-tight text-white hidden md:block">Kali<span className="text-blue-500">Res</span></span>
         </Link>
 
-        {/* 搜索栏 (核心修改点) */}
+        {/* 4. 新增：源切换下拉菜单 (放置在 Logo 和 搜索框 之间) */}
+        <div className="flex items-center gap-2 mr-4 shrink-0">
+          <div className="relative group">
+             <button className="flex items-center gap-2 text-sm font-bold text-gray-200 bg-[#161b22] border border-white/10 hover:border-white/20 px-3 py-1.5 rounded-lg transition-all">
+               <Layers size={14} className="text-blue-400"/> 
+               <span>源: {currentSource}</span>
+             </button>
+             
+             {/* 下拉菜单内容 */}
+             <div className="absolute top-full left-0 mt-2 w-32 bg-[#161b22] border border-white/10 rounded-lg shadow-xl shadow-black/50 overflow-hidden hidden group-hover:block z-50">
+                <button 
+                  onClick={() => switchSource('Age')} 
+                  className={`block w-full text-left px-4 py-2 text-sm hover:bg-blue-600/20 hover:text-blue-400 transition-colors ${currentSource === 'Age' ? 'text-blue-400 bg-blue-600/10' : 'text-gray-400'}`}
+                >
+                  Age动漫
+                </button>
+                <button 
+                  onClick={() => switchSource('Yhmc')} 
+                  className={`block w-full text-left px-4 py-2 text-sm hover:bg-purple-600/20 hover:text-purple-400 transition-colors ${currentSource === 'Yhmc' ? 'text-purple-400 bg-purple-600/10' : 'text-gray-400'}`}
+                >
+                  樱花动漫
+                </button>
+             </div>
+          </div>
+        </div>
+
+        {/* 搜索栏 */}
         <div className="flex-1 max-w-xl relative group">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <Search size={16} className="text-gray-500 group-focus-within:text-blue-500 transition-colors" />
             </div>
             <input 
               type="text" 
-              placeholder="搜索资源..." 
-              // 修改：绑定本地 state
+              placeholder={`在 ${currentSource} 中搜索...`} 
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
-              onKeyDown={handleSearch} // 修改：绑定跳转逻辑
+              onKeyDown={handleSearch}
               className="w-full bg-[#161b22] border border-white/5 text-sm text-gray-200 rounded-full pl-10 pr-10 py-2 focus:outline-none focus:bg-[#0d1117] focus:ring-1 focus:ring-blue-500/50 transition-all placeholder-gray-600"
             />
             {keyword && (
@@ -94,7 +119,7 @@ export default function Header() {
             )}
         </div>
 
-        {/* 右侧功能区 (保持不变) */}
+        {/* 右侧功能区 */}
         <div className="flex items-center gap-4 ml-6">
           <button className="text-gray-400 hover:text-white transition-colors relative hidden sm:block"><Clock size={20} /></button>
           <button className="text-gray-400 hover:text-white transition-colors relative hidden sm:block">
@@ -124,7 +149,6 @@ export default function Header() {
             </div>
           ) : (
             <div 
-              // 保持使用 context 的方法
               onClick={openLoginModal}
               className="w-8 h-8 rounded-full bg-gray-700 overflow-hidden border border-gray-600 cursor-pointer flex items-center justify-center hover:ring-2 hover:ring-blue-500 transition-all active:scale-95"
             >
@@ -134,7 +158,7 @@ export default function Header() {
         </div>
       </header>
 
-      {/* 登录弹窗 (保持不变) */}
+      {/* 登录弹窗 */}
       {isLoginOpen && (
         <div 
           id="modal-overlay"

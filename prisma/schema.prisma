@@ -21,13 +21,18 @@ model Video {
   views       Int      @default(0)
 
   // --- 新增 & 优化字段 ---
-  sourceId    String?  @unique // 外部资源唯一 ID，用于防重
-  status      String?          // 连载、完结、预告等
   
+  // 1. 新增来源站点字段，默认为 "Age"
+  sourceSite  String   @default("Age")
+
+  // 2. 移除了 @unique (改为由下方的复合索引控制)
+  sourceId    String?
+
+  status      String?        // 连载、完结、预告等
   year        String?  // 年份 (如 "2026")
   studio      String?  // 制作公司 (如 "J.C.STAFF")
 
-  // --- 首页标记字段 (本次新增) ---
+  // --- 首页标记字段 ---
   isRecommended Boolean  @default(false) // 是否为“今日推荐”
   isRecent      Boolean  @default(false) // 是否为“最近更新” (用于人工置顶等场景)
 
@@ -39,6 +44,9 @@ model Video {
   tags        Tag[]
   likesCount  Int      @default(0)
   likes       Like[]
+
+  // 3. 新增复合唯一索引：同一个站点下的 sourceId 才是唯一的
+  @@unique([sourceSite, sourceId])
 }
 
 model Category {

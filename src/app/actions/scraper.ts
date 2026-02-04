@@ -1,11 +1,11 @@
+// src/app/actions/scraper.ts
 'use server';
 
-import { prisma } from '@/lib/prisma'; // 采用单例模式，防止热重载产生过多连接
+import { prisma } from '@/lib/prisma';
 import { ScraperManager } from '@/lib/scraper/ScraperManager';
 
 /**
  * 核心功能：批量同步指定源、指定页码范围的数据
- * 集成了安全 Tag 过滤与 upsert 幂等写入
  */
 export async function syncSourceData(sourceName: string, startPage: number, endPage: number) {
   const source = ScraperManager.getSource(sourceName);
@@ -14,7 +14,6 @@ export async function syncSourceData(sourceName: string, startPage: number, endP
   let totalCount = 0;
 
   try {
-    // 循环页码：从 startPage 爬到 endPage
     for (let page = startPage; page <= endPage; page++) {
       console.log(`[Sync] 正在抓取第 ${page} 页...`);
       const items = await source.scrapeCatalog(page);
@@ -24,12 +23,8 @@ export async function syncSourceData(sourceName: string, startPage: number, endP
         continue;
       }
 
-      // 并发写入数据库
       await Promise.all(items.map(async (item) => {
-        
-        // 1. 处理标签关联 (connectOrCreate)
         const validTags = item.tags ? item.tags.filter(t => t && t.trim() !== '') : [];
-        
         const tagOperations = validTags.length > 0 
           ? {
               connectOrCreate: validTags.map((tagName) => ({
@@ -39,9 +34,13 @@ export async function syncSourceData(sourceName: string, startPage: number, endP
             }
           : undefined;
 
-        // 2. 写入/更新视频
         return prisma.video.upsert({
-          where: { sourceId: item.sourceId },
+          where: {
+            sourceSite_sourceId: {
+              sourceId: item.sourceId,
+              sourceSite: sourceName
+            }
+          },
           update: {
             title: item.title,
             coverUrl: item.coverUrl,
@@ -50,11 +49,12 @@ export async function syncSourceData(sourceName: string, startPage: number, endP
             type: item.type,
             year: item.year || null,
             studio: (item as any).studio || null,
-            tags: tagOperations, // 关联标签
+            tags: tagOperations,
             updatedAt: new Date()
           },
           create: {
             sourceId: item.sourceId,
+            sourceSite: sourceName,
             title: item.title,
             coverUrl: item.coverUrl,
             type: item.type || "动漫",
@@ -62,19 +62,17 @@ export async function syncSourceData(sourceName: string, startPage: number, endP
             status: item.status,
             year: item.year || null,
             studio: (item as any).studio || null,
-            videoUrl: "", // 留空，待点击时解析
+            videoUrl: "",
             rating: item.rating || 0,
-            tags: tagOperations // 关联标签
+            tags: tagOperations
           }
         });
       }));
 
       totalCount += items.length;
-      console.log(`✅ [Sync] 第 ${page} 页同步完成，入库 ${items.length} 条`);
     }
 
-    return { success: true, message: `同步完成，共抓取 ${endPage - startPage + 1} 页，入库 ${totalCount} 条数据` };
-
+    return { success: true, message: `同步完成，共 ${totalCount} 条数据` };
   } catch (error: any) {
     console.error("同步失败:", error);
     return { success: false, message: error.message || "未知错误" };
@@ -82,100 +80,121 @@ export async function syncSourceData(sourceName: string, startPage: number, endP
 }
 
 /**
- * 新增：同步首页数据 (推荐与最近更新)
- * 使用事务确保数据标记的一致性
+ * 修改后：同步首页数据，支持 Age(固定结构) 和 Yhmc(动态Section) 多源
  */
-export async function syncHomeData(sourceName: string = 'Age') {
+export async function syncHomeData(sourceName: string) {
   const source = ScraperManager.getSource(sourceName);
-  // 检查是否支持 scrapeHome
-  if (!source || !(source as any).scrapeHome) return { success: false, message: "源不支持首页抓取" };
+  // 检查是否具备首页抓取能力
+  if (!source || !(source as any).scrapeHome) {
+    return { success: false, message: "该源不支持首页抓取" };
+  }
 
   try {
-    // 1. 抓取
-    const { recommended, recent } = await (source as any).scrapeHome();
+    const homeData = await (source as any).scrapeHome();
 
-    // 2. 数据库事务操作
     await prisma.$transaction(async (tx) => {
-      // A. 重置所有标记 (清除旧的推荐/更新状态)
+      // 1. 重置该源的旧标记，防止首页下架的内容依然带标
       await tx.video.updateMany({
+        where: { sourceSite: sourceName },
         data: { isRecommended: false, isRecent: false }
       });
 
-      // B. 写入推荐列表 (存在则更新标记，不存在则创建)
-      for (const item of recommended) {
-        await tx.video.upsert({
-          where: { sourceId: item.sourceId },
-          update: { isRecommended: true, updatedAt: new Date() }, // 只更新标记，不覆盖详情页可能已有的丰富数据
-          create: {
-            sourceId: item.sourceId,
-            title: item.title,
-            coverUrl: item.coverUrl,
-            isRecommended: true,
-            type: "动漫",
-            status: item.status,
-            videoUrl: ""
+      // 2. 处理 Age 类型的结构 { recommended: [], recent: [] }
+      if (homeData.recommended && homeData.recent) {
+        // 处理推荐列表
+        for (const item of homeData.recommended) {
+          await tx.video.upsert({
+            where: { sourceSite_sourceId: { sourceId: item.sourceId, sourceSite: sourceName } },
+            update: { isRecommended: true, updatedAt: new Date() },
+            create: {
+              sourceId: item.sourceId,
+              sourceSite: sourceName,
+              title: item.title,
+              coverUrl: item.coverUrl,
+              isRecommended: true,
+              type: "动漫",
+              status: item.status,
+              videoUrl: ""
+            }
+          });
+        }
+        // 处理更新列表
+        for (const item of homeData.recent) {
+          await tx.video.upsert({
+            where: { sourceSite_sourceId: { sourceId: item.sourceId, sourceSite: sourceName } },
+            update: { isRecent: true, status: item.status, updatedAt: new Date() },
+            create: {
+              sourceId: item.sourceId,
+              sourceSite: sourceName,
+              title: item.title,
+              coverUrl: item.coverUrl,
+              isRecent: true,
+              type: "动漫",
+              status: item.status,
+              videoUrl: ""
+            }
+          });
+        }
+      } 
+      
+      // 3. 处理 Yhmc 类型的动态 Section 结构 { sections: [...] }
+      else if (homeData.sections && Array.isArray(homeData.sections)) {
+        for (const section of homeData.sections) {
+          // 根据标题关键词判断权重
+          const isRec = section.title.includes("热映") || section.title.includes("推荐");
+          
+          for (const item of section.items) {
+            await tx.video.upsert({
+              where: { sourceSite_sourceId: { sourceId: item.sourceId, sourceSite: sourceName } },
+              update: { 
+                isRecommended: isRec, 
+                isRecent: !isRec, 
+                type: item.type || "动漫",
+                status: item.status,
+                updatedAt: new Date() 
+              },
+              create: {
+                sourceId: item.sourceId,
+                sourceSite: sourceName,
+                title: item.title,
+                coverUrl: item.coverUrl,
+                type: item.type || "动漫",
+                status: item.status,
+                isRecommended: isRec,
+                isRecent: !isRec,
+                videoUrl: ""
+              }
+            });
           }
-        });
-      }
-
-      // C. 写入最近更新列表
-      for (const item of recent) {
-        await tx.video.upsert({
-          where: { sourceId: item.sourceId },
-          update: { isRecent: true, status: item.status, updatedAt: new Date() }, // 更新状态(第几集)
-          create: {
-            sourceId: item.sourceId,
-            title: item.title,
-            coverUrl: item.coverUrl,
-            isRecent: true,
-            type: "动漫",
-            status: item.status,
-            videoUrl: ""
-          }
-        });
+        }
       }
     });
 
-    return { success: true, message: `首页同步成功 (推荐:${recommended.length}, 更新:${recent.length})` };
+    return { success: true, message: `首页同步成功 (${sourceName})` };
   } catch (error: any) {
     console.error("首页同步失败:", error);
-    return { success: false, message: error.message };
+    return { success: false, message: error.message || "未知错误" };
   }
 }
 
-/**
- * 获取爬虫源的详细数据 (实时抓取，不存库)
- */
-export async function getScraperDetailData(sourceId: string, sourceName: string = 'Age') {
+export async function getScraperDetailData(sourceId: string, sourceName: string) {
   try {
     const source = ScraperManager.getSource(sourceName);
     if (!source) return { success: false, data: null };
-
     const detailData = await source.scrapeDetail(sourceId);
     return { success: true, data: detailData };
   } catch (error) {
-    console.error("获取详情失败:", error);
-    return { success: false, data: null, message: "无法获取番剧详情" };
+    return { success: false, data: null, message: "无法获取详情" };
   }
 }
 
-/**
- * 解析具体集数的视频播放地址
- */
-export async function getScraperVideo(playUrl: string, sourceName: string = 'Age') {
+export async function getScraperVideo(playUrl: string, sourceName: string) {
   try {
     const source = ScraperManager.getSource(sourceName);
     if (!source) return { success: false, message: "源不存在" };
-
     const videoData = await source.scrapeVideo(playUrl);
-    
-    if (videoData) {
-      return { success: true, data: videoData };
-    } else {
-      return { success: false, message: "视频解析失败" };
-    }
+    return videoData ? { success: true, data: videoData } : { success: false, message: "视频解析失败" };
   } catch (error) {
-    console.error(`[Scraper] 解析视频地址异常:`, error);
     return { success: false, message: "解析异常" };
   }
 }

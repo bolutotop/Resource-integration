@@ -1,8 +1,11 @@
+// src/app/layout.tsx
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-// 引入 Provider
+
+// 引入 Providers
 import { AuthModalProvider } from '@/context/AuthModalContext';
+import { SourceProvider } from '@/context/SourceContext'; // 新增引入
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -19,10 +22,13 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        {/* 包裹 Provider */}
-        <AuthModalProvider>
-          {children}
-        </AuthModalProvider>
+        {/* 最外层包裹 SourceProvider */}
+        <SourceProvider>
+          {/* 内层包裹 AuthModalProvider */}
+          <AuthModalProvider>
+            {children}
+          </AuthModalProvider>
+        </SourceProvider>
       </body>
     </html>
   );
