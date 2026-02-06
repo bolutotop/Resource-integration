@@ -1,51 +1,50 @@
-#配置环境
-更新系统源 `sudo apt update && sudo apt upgrade -y`
+# 配置环境
+更新系统源 :`sudo apt update && sudo apt upgrade -y`
 
-安装基础工具 `(git, curl) sudo apt install -y git curl`
+安装基础工具: `(git, curl) sudo apt install -y git curl`
 
-nodejs环境 `sudo apt install nodejs` 把npm更新到11.7.0版本
+nodejs环境: `sudo apt install nodejs` 
+把npm更新到11.7.0版本:
 
-#项目部署
- `git clone https://github.com/bolutotop/Resource-integration.git`
-npm install 安装依赖
+# 项目部署
+clone : `git clone https://github.com/bolutotop/Resource-integration.git`
+安装依赖 :`npm install` 
 
-#数据库
-部署
+# 数据库
 create .env file write:
 DATABASE_URL="file:./dev.db"
 
-#生成 Prisma Client (必须) `npx prisma generate`
+生成 Prisma Client (必须) :`npx prisma generate`
 
-运行迁移 (这将创建 prod.db 文件) `npx prisma migrate deploy`
+运行迁移 (这将创建 prod.db 文件): `npx prisma migrate deploy`
 
-执行预设的 seed 脚本 `npx prisma db seed`
+执行预设的 seed 脚本 :`npx prisma db seed`
 
-赋予当前目录写入权限 `chmod 777 prod.db chmod 777 .` 
+赋予当前目录写入权限 :`chmod 777 prod.db chmod 777 .` 
 
 修改
-如果你修改了 prisma/schema.prisma (如加了新字段) `npx prisma migrate deploy`
+如果你修改了 prisma/schema.prisma (如加了新字段): `npx prisma migrate deploy`
 如果你想查看数据库里的数据 (Prisma Studio Web界面)
-注意：这会在服务器的 5555 端口启动，你需要配置安全组放行 5555 端口 `npx prisma studio`
+注意：这会在服务器的 5555 端口启动，你需要配置安全组放行 5555 端口 :`npx prisma studio`
 
-上线
-不使用Nginx
-构建生产版本 `npm run build`
+# 上线
+## 不使用Nginx
+构建生产版本 :`npm run build`
 
-安装pm2 `npm install -g pm2`
+安装pm2 :`npm install -g pm2`
 
-使用 PM2 启动 Next.js `PORT=8080 pm2 start npm --name "ocr-app" -- start` 端口(8080)可选
+使用 PM2 启动 Next.js :`PORT=8080 pm2 start npm --name "ocr-app" -- start` 端口(8080)可选
 
-保存当前进程列表 (防止重启服务器后服务丢失) `pm2 save pm2 startup`
+保存当前进程列表 (防止重启服务器后服务丢失) :`pm2 save pm2 startup`
 
 当你修改代码并重新构建生产版本时
 
 重启pm2 pm2 reload "你创建的(ocr-app)"
-使用Nginx
-安装Nginx `sudo apt install nginx`
+## 使用Nginx
+安装Nginx :`sudo apt install nginx`
 
-修改配置
+修改配置:`sudo vim /etc/nginx/sites-available/default`
 
-`sudo vim /etc/nginx/sites-available/default`
 write:
 
 ```js
