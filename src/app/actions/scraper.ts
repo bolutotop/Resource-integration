@@ -5,82 +5,68 @@ import { prisma } from '@/lib/prisma';
 import { ScraperManager } from '@/lib/scraper/ScraperManager';
 
 /**
- * 核心功能：批量同步指定源、指定页码范围的数据
+ * 修改后：同步指定源、指定分类、指定页码、指定年份的数据
+ * 变更点：由原来的 loop 范围抓取改为单页抓取，并增加了 category 和 year 参数
  */
-export async function syncSourceData(sourceName: string, startPage: number, endPage: number) {
+export async function syncCatalog(sourceName: string, page: number = 1, category: string = '日韩动漫', year: string = '') {
   const source = ScraperManager.getSource(sourceName);
   if (!source) return { success: false, message: "源不存在" };
 
-  let totalCount = 0;
-
   try {
-    for (let page = startPage; page <= endPage; page++) {
-      console.log(`[Sync] 正在抓取第 ${page} 页...`);
-      const items = await source.scrapeCatalog(page);
-      
-      if (!items || items.length === 0) {
-        console.log(`[Sync] 第 ${page} 页无数据，跳过`);
-        continue;
-      }
-
-      await Promise.all(items.map(async (item) => {
-        const validTags = item.tags ? item.tags.filter(t => t && t.trim() !== '') : [];
-        const tagOperations = validTags.length > 0 
-          ? {
-              connectOrCreate: validTags.map((tagName) => ({
-                where: { name: tagName },
-                create: { name: tagName }
-              }))
-            }
-          : undefined;
-
-        return prisma.video.upsert({
-          where: {
-            sourceSite_sourceId: {
-              sourceId: item.sourceId,
-              sourceSite: sourceName
-            }
-          },
-          update: {
-            title: item.title,
-            coverUrl: item.coverUrl,
-            description: item.desc,
-            status: item.status,
-            type: item.type,
-            year: item.year || null,
-            studio: (item as any).studio || null,
-            tags: tagOperations,
-            updatedAt: new Date()
-          },
-          create: {
-            sourceId: item.sourceId,
-            sourceSite: sourceName,
-            title: item.title,
-            coverUrl: item.coverUrl,
-            type: item.type || "动漫",
-            description: item.desc,
-            status: item.status,
-            year: item.year || null,
-            studio: (item as any).studio || null,
-            videoUrl: "",
-            rating: item.rating || 0,
-            tags: tagOperations
-          }
-        });
-      }));
-
-      totalCount += items.length;
+    console.log(`[Sync] 正在抓取 ${sourceName} - ${category} - ${year || '全部年份'} - 第 ${page} 页...`);
+    
+    // 传入 category 和 year 调用源的抓取方法
+    const items = await source.scrapeCatalog(page, category, year);
+    
+    if (!items || items.length === 0) {
+      return { success: true, count: 0, message: "本页无数据" };
     }
 
-    return { success: true, message: `同步完成，共 ${totalCount} 条数据` };
+    for (const item of items) {
+      // 准备更新的数据对象
+      // 这里的 upsert 逻辑简化了，专注于基础信息同步
+      const updateData: any = { 
+        updatedAt: new Date(),
+        status: item.status,
+        // 注意：这里移除了 title/coverUrl/type 的默认更新，
+        // 如果你需要保持图片/标题与源站实时同步，请将它们加回来。
+      };
+      
+      // 只有当爬虫明确抓到了年份（也就是我们在YhmcSource里强行赋值的year），才更新数据库的year
+      // 这样防止"全部年份"的抓取覆盖掉已有的年份信息
+      if (item.year) {
+        updateData.year = item.year;
+      }
+
+      await prisma.video.upsert({
+        where: { 
+          sourceSite_sourceId: { sourceId: item.sourceId, sourceSite: sourceName }
+        },
+        update: updateData,
+        create: {
+          sourceId: item.sourceId,
+          sourceSite: sourceName,
+          title: item.title,
+          coverUrl: item.coverUrl,
+          type: item.type, // 这里会写入 "国产动漫"、"电影" 等
+          year: item.year || "", // 创建时，如果有年份就存，没有就空
+          status: item.status,
+          description: item.desc,
+          videoUrl: "" 
+        }
+      });
+    }
+
+    return { success: true, count: items.length, message: `成功同步 ${items.length} 条数据` };
   } catch (error: any) {
-    console.error("同步失败:", error);
-    return { success: false, message: error.message || "未知错误" };
+    console.error(`[Sync Error] ${sourceName} 第 ${page} 页失败:`, error);
+    return { success: false, message: error.message || "同步异常" };
   }
 }
 
 /**
- * 修改后：同步首页数据，支持 Age(固定结构) 和 Yhmc(动态Section) 多源
+ * 同步首页数据，支持 Age(固定结构) 和 Yhmc(动态Section) 多源
+ * (保持原有逻辑不变)
  */
 export async function syncHomeData(sourceName: string) {
   const source = ScraperManager.getSource(sourceName);
@@ -177,6 +163,9 @@ export async function syncHomeData(sourceName: string) {
   }
 }
 
+/**
+ * 获取详情页数据
+ */
 export async function getScraperDetailData(sourceId: string, sourceName: string) {
   try {
     const source = ScraperManager.getSource(sourceName);
@@ -188,6 +177,9 @@ export async function getScraperDetailData(sourceId: string, sourceName: string)
   }
 }
 
+/**
+ * 获取视频播放地址
+ */
 export async function getScraperVideo(playUrl: string, sourceName: string) {
   try {
     const source = ScraperManager.getSource(sourceName);

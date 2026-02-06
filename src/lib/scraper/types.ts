@@ -12,7 +12,7 @@ export interface ScrapedItem {
   desc?: string;
   rating?: number;
 
-  year?: string;
+  year?: string;       // <--- 确保包含年份字段
   studio?: string;
   tags?: string[];
 }
@@ -39,7 +39,7 @@ export interface ScraperPlaylist {
  */
 export interface ScraperFullDetail {
   playlists: ScraperPlaylist[]; 
-  metadata: {                    
+  metadata: {                  
     year: string;
     tags: string[];
     status: string;
@@ -78,18 +78,22 @@ export type ScrapedHomeData =
 export interface IScraperSource {
   name: string; 
   
-  /** 爬取目录页 */
-  scrapeCatalog(page: number): Promise<ScrapedItem[]>;
+  /**
+   * 抓取首页数据
+   * Modified: 返回类型为 any 以提升灵活性 (e.g. ScrapedHomeData)
+   */
+  scrapeHome?(): Promise<any>;
+
+  /** * 爬取目录页 
+   * @param page 页码
+   * @param category 分类 (可选)
+   * @param year 年份 (可选) -> Added
+   */
+  scrapeCatalog(page: number, category?: string, year?: string): Promise<ScrapedItem[]>;
   
   /** 获取详情页完整信息 */
   scrapeDetail(sourceId: string): Promise<ScraperFullDetail>;
 
   /** 解析具体的播放地址 */
   scrapeVideo(playUrl: string): Promise<ScraperVideoSource | null>;
-
-  /**
-   * 抓取首页数据
-   * 返回 ScrapedHomeData 以支持不同的首页布局需求
-   */
-  scrapeHome?(): Promise<ScrapedHomeData>;
 }

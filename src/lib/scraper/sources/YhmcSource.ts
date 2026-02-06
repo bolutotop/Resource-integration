@@ -6,12 +6,41 @@ export class YhmcSource implements IScraperSource {
   name = "Yhmc";
   private baseUrl = "https://www.yhmc.cc";
   
+  // --- 1. Category Mapping Definition ---
+  private categoryMap: Record<string, string> = {
+    '日韩动漫': '229',
+    '国产动漫': '228',
+    '欧美动漫': '231',
+    '港台动漫': '230',
+    '动画片': '272',   // e.g. Zootopia
+    '电影': '77',
+    '电视剧': '78',
+    '综艺': '79',
+    '短剧': '233',
+    '有声动漫': '232'
+  };
+
+  // --- 2. Year Mapping (New) ---
+  // Mapped based on URL pattern: https://www.yhmc.cc/vod/1/229/0/30/0/0/0/0 (2025)
+  private yearMap: Record<string, string> = {
+    '2026': '40', // Reserved
+    '2025': '30',
+    '2024': '31',
+    '2023': '32',
+    '2022': '33',
+    '2021': '34',
+    '2020': '35',
+    '10年代': '36',
+    '00年代': '37',
+    '老片': '38'
+  };
+  
   private headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     'Referer': 'https://www.yhmc.cc/'
   };
 
-  // --- 1. Home Scraping ---
+  // --- 3. Home Scraping ---
   async scrapeHome(): Promise<{ sections: ScrapedHomeSection[] }> {
     console.log(`[YhmcScraper] 正在动态抓取首页...`);
     try {
@@ -94,7 +123,7 @@ export class YhmcSource implements IScraperSource {
     }
   }
 
-  // --- 2. Detail Page (Playlist Parsing) ---
+  // --- 4. Detail Page (Playlist Parsing) ---
   async scrapeDetail(sourceId: string): Promise<ScraperFullDetail> {
     const detailUrl = `${this.baseUrl}/v/${sourceId}`;
     console.log(`[YhmcScraper] 抓取详情: ${detailUrl}`);
@@ -149,9 +178,71 @@ export class YhmcSource implements IScraperSource {
     }
   }
 
-  async scrapeCatalog(page: number) { return []; }
+  // --- 5. Catalog Scraping (Modified with Year Support) ---
+  async scrapeCatalog(page: number, category?: string, year?: string): Promise<ScrapedItem[]> {
+    // Get Category ID (Default to '229' Japanese/Korean Anime)
+    const catId = category && this.categoryMap[category] ? this.categoryMap[category] : '229';
+    const catName = category || '日韩动漫';
 
-  // --- 3. Video Decoding (Core Logic) ---
+    // Get Year ID (Default to '0' All)
+    const yearId = year && this.yearMap[year] ? this.yearMap[year] : '0';
+
+    // Construct URL: /vod/{page}/{catId}/0/{yearId}/0/0/0/0
+    const catalogUrl = `${this.baseUrl}/vod/${page}/${catId}/0/${yearId}/0/0/0/0`;
+    
+    console.log(`[YhmcScraper] 抓取目录: [${catName}] [${year || '全部年份'}] 第${page}页 -> ${catalogUrl}`);
+
+    try {
+      const { data } = await axios.get(catalogUrl, { headers: this.headers, timeout: 15000 });
+      const $ = cheerio.load(data);
+      
+      const items: ScrapedItem[] = [];
+
+      $('.public-list-box').each((_, element) => {
+        const $item = $(element);
+        
+        const linkEl = $item.find('.public-list-exp');
+        const href = linkEl.attr('href') || "";
+        
+        // Extract xxxxx/xxx from /v/xxxxx/xxx
+        const idMatch = href.match(/\/v\/(.+)/); 
+        
+        if (!idMatch) return;
+        const sourceId = idMatch[1];
+
+        const imgEl = $item.find('img.gen-movie-img');
+        let coverUrl = imgEl.attr('data-src') || imgEl.attr('src') || "";
+        if (coverUrl && !coverUrl.startsWith('http')) {
+             if(coverUrl.startsWith('//')) coverUrl = `https:${coverUrl}`;
+             else coverUrl = `https://www.yhmc.cc${coverUrl.startsWith('/') ? '' : '/'}${coverUrl}`;
+        }
+
+        const title = $item.find('.time-title').text().trim();
+        const status = $item.find('.public-list-prb').text().trim();
+        const desc = $item.find('.public-list-subtitle').text().trim();
+
+        items.push({
+          sourceId,
+          title,
+          coverUrl,
+          status,
+          desc,
+          type: catName, // Store currently scraped category
+          year: year || undefined, // Store year if we are filtering by it
+          rating: 0
+        });
+      });
+
+      console.log(`[YhmcScraper] 本页抓取成功: ${items.length} 条`);
+      return items;
+
+    } catch (error: any) {
+      console.error(`[YhmcScraper] 目录失败: ${error.message}`);
+      return [];
+    }
+  }
+
+  // --- 6. Video Decoding (Core Logic) ---
   async scrapeVideo(playUrl: string): Promise<ScraperVideoSource | null> {
     console.log(`[YhmcScraper] 正在解析加密地址: ${playUrl}`);
     try {
