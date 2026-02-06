@@ -354,3 +354,52 @@ export async function getHomeGroupedData(source: string) {
 }
 
 
+export async function getFilterOptions(source: string) {
+  try {
+    // 1. 查出该源下所有不重复的分类 (type)
+    const categories = await prisma.video.findMany({
+      where: { 
+        sourceSite: source,
+        type: { not: '' } // 排除空分类
+      },
+      distinct: ['type'],
+      select: { type: true },
+    });
+
+    // 2. 查出该源下所有不重复的年份 (year)
+    const years = await prisma.video.findMany({
+      where: { 
+        sourceSite: source,
+        year: { not: '' } // 排除空年份
+      },
+      distinct: ['year'],
+      select: { year: true },
+    });
+
+    // 3. 数据处理与排序
+    // 分类：提取字符串
+    const categoryList = categories.map(c => c.type).filter(Boolean);
+    
+    // 年份：提取字符串 -> 过滤非数字(如"老片")分开处理 -> 排序
+    const yearListRaw = years.map(y => y.year).filter(Boolean);
+    
+    // 简单的年份排序逻辑：数字大的排前面，非数字(如"10年代")放后面
+    const yearList = yearListRaw.sort((a, b) => {
+      const numA = parseInt(a);
+      const numB = parseInt(b);
+      if (!isNaN(numA) && !isNaN(numB)) return numB - numA; // 降序 (2025 -> 2024)
+      if (!isNaN(numA)) return -1; // 数字排在文字前
+      if (!isNaN(numB)) return 1;
+      return a.localeCompare(b); // 都是文字则按字母
+    });
+
+    return {
+      categories: categoryList,
+      years: yearList
+    };
+
+  } catch (error) {
+    console.error("获取筛选选项失败:", error);
+    return { categories: [], years: [] };
+  }
+}
